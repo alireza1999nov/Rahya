@@ -12,6 +12,10 @@ const accountRepository = {
 
     findByUserIdAndName(userId, name) {
         return accounts.find(account => account.userId === userId && account.name === name) ?? null;
+    },
+
+    findById(accountId) {
+        return accounts.find(account => account.id === accountId) ?? null;
     }
 };
 
