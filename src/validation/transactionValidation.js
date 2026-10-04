@@ -1,5 +1,8 @@
 const validateTransactionInput = ({
     type,
+    accountId,
+    sourceAccountId,
+    destinationAccountId,
     amount,
     category,
     subCategory,
@@ -15,11 +18,35 @@ const validateTransactionInput = ({
 
     const normalizedType = type.trim().toLowerCase();
 
-    if (!['income', 'expense', 'transfer'].includes(normalizedType)) {
+    if (
+        (normalizedType === 'income' || normalizedType === 'expense')
+        && (!accountId || accountId.trim() === '')
+    ) {
         return {
             valid: false,
-            message: 'invalid transaction type',
+            message: 'accountId is required for income and expense transactions',
         };
+    }
+
+    if (normalizedType === 'transfer') {
+        if (!sourceAccountId || sourceAccountId.trim() === '') {
+            return {
+                valid: false,
+                message: 'sourceAccountId is required for transfer transactions',
+            };
+        }
+        if (!destinationAccountId || destinationAccountId.trim() === '') {
+            return {
+                valid: false,
+                message: 'destinationAccountId is required for transfer transactions',
+            };
+        }
+        if (sourceAccountId.trim() === destinationAccountId.trim()) {
+            return {
+                valid: false,
+                message: 'sourceAccountId and destinationAccountId cannot be the same',
+            };
+        }
     }
 
     if ((normalizedType === 'income' || normalizedType === 'expense')
@@ -30,7 +57,7 @@ const validateTransactionInput = ({
             message: 'category is required for income and expense transactions',
         };
     }
-    
+
     if (!Number.isFinite(amount)) {
         return {
             valid: false,
@@ -93,6 +120,8 @@ const validateTransactionInput = ({
             type: normalizedType,
             amount,
             transactionDate,
+            ...(normalizedType === 'income' || normalizedType === 'expense' ? { accountId } : {}),
+            ...(normalizedType === 'transfer' ? { sourceAccountId, destinationAccountId } : {}),
             ...(category !== undefined && { category }),
             ...(subCategory !== undefined && { subCategory }),
             ...(description !== undefined && { description: description.trim() }),
