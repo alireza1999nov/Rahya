@@ -5,11 +5,14 @@ const transactionRepository = {
         transactions.push(transaction);
         return transaction;
     },
-    findByAccountId(accountId) {
+    findByRelatedAccountId(accountId) {
         return transactions.filter(
-            transaction =>
-                transaction.accountId === accountId &&
-                transaction.deletedAt === null
+            transaction => (
+                transaction.accountId === accountId ||
+                transaction.sourceAccountId === accountId ||
+                transaction.destinationAccountId === accountId
+            ) &&
+            transaction.deletedAt === null
         );
     }
 }

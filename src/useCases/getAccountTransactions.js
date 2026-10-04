@@ -8,7 +8,7 @@ const getAccountTransactions = (accountId, transactionRepository, accountReposit
         };
     }
 
-    const transactions = transactionRepository.findByAccountId(accountId);
+    const transactions = transactionRepository.findByRelatedAccountId(accountId);
 
     return {
         valid: true,
