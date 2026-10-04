@@ -1,0 +1,50 @@
+import transactionRepository from '../repositories/transactionRepository.js';
+import accountRepository from '../repositories/accountRepository.js';
+import createTransaction from '../useCases/createTransaction.js';
+import getAccountTransactions from '../useCases/getAccountTransactions.js';
+
+
+const createTransactionController = (req, res) => {
+
+    const result = createTransaction(
+        req.body,
+        transactionRepository,
+        accountRepository
+    );
+
+    if (!result.valid) {
+        return res.status(400).json({
+            error: result.error ?? 'VALIDATION_ERROR',
+            message: result.message
+        });
+    }
+
+    return res.status(201).json(result.data);
+};
+
+
+const getAccountTransactionsController = (req, res) => {
+
+    const { accountId } = req.params;
+
+    const result = getAccountTransactions(
+        accountId,
+        transactionRepository,
+        accountRepository
+    );
+
+    if (!result.valid) {
+        return res.status(404).json({
+            error: result.error,
+            message: result.message
+        });
+    }
+
+    return res.status(200).json(result.data);
+};
+
+
+export {
+    createTransactionController,
+    getAccountTransactionsController
+};

@@ -1,26 +1,18 @@
 import express from 'express';
-import createTransaction from '../useCases/createTransaction.js';
-import transactionRepository from '../repositories/transactionRepository.js';
-import accountRepository from '../repositories/accountRepository.js';
+import {
+    createTransactionController,
+    getAccountTransactionsController
+} from '../controllers/transactionController.js';
 
 const router = express.Router();
 
-router.post('/transactions', (req, res) => {
+router.get('/accounts/:accountId/transactions',
+    getAccountTransactionsController
+);
 
-    const result = createTransaction(
-        req.body,
-        transactionRepository,
-        accountRepository
-    );
-
-    if (!result.valid) {
-        return res.status(400).json({
-            error: result.error ?? 'VALIDATION_ERROR',
-            message: result.message
-        });
-    }
-
-    return res.status(201).json(result.data);
-});
+router.post(
+    '/transactions',
+    createTransactionController
+);
 
 export default router;
