@@ -1,9 +1,9 @@
 import {randomUUID} from 'node:crypto';
-import validateTransactionInput from '../validation/transactionValidation.js';
+import {validateTransactionCreateInput} from '../validation/transactionValidation.js';
 
 const createTransaction = (transactionInput, transactionRepository, accountRepository) => {
 
-    const validation = validateTransactionInput(transactionInput);
+    const validation = validateTransactionCreateInput(transactionInput);
 
     if (!validation.valid) {
         return validation;

@@ -1,4 +1,101 @@
-const validateTransactionInput = ({
+const validateAmount = (amount) => {
+    if (!Number.isFinite(amount)) {
+        return {
+            valid: false,
+            message: 'Transaction amount must be a number',
+        };
+    };
+
+    if (amount <= 0) {
+        return {
+            valid: false,
+            message: 'Transaction amount must be greater than zero',
+        };
+    }
+
+    if (Math.round(amount * 10) !== amount * 10) {
+        return {
+            valid: false,
+            message: 'Transaction amount must have at most one decimal place',
+        };
+    }
+    return {
+        valid: true
+    };
+}
+
+const validateCategory = (category) => {
+    if (category !== undefined && typeof category !== 'string') {
+        return {
+            valid: false,
+            message: 'Transaction category must be a string',
+        };
+    }
+
+    if (category !== undefined && category.trim() === "") {
+        return {
+            valid: false,
+            message: 'Transaction category cannot be empty'
+        };
+    }
+
+    return {
+        valid: true,
+        data: category?.trim()
+    }
+}
+
+const validateSubCategory = (subCategory) => {
+
+    if (subCategory !== undefined && typeof subCategory !== 'string') {
+        return {
+            valid: false,
+            message: 'Transaction subCategory must be a string',
+        };
+    }
+
+    return {
+        valid: true,
+        data: subCategory?.trim()
+    };
+};
+
+const validateTransactionDate = (transactionDate) => {
+    if (typeof transactionDate !== 'string') {
+        return {
+            valid: false,
+            message: 'Transaction date must be a string',
+        };
+    }
+
+    return {
+        valid: true,
+        data: transactionDate
+    };
+};
+
+const validateDescription = (description) => {
+    if (description !== undefined && typeof description !== 'string') {
+        return {
+            valid: false,
+            message: 'Transaction description must be a string',
+        };
+    }
+
+    if (description !== undefined && description.trim().length > 400 ) {
+        return {
+            valid: false,
+            message: 'Transaction description must be at most 400 characters long',
+        };
+    }
+
+    return {
+        valid: true,
+        data: description?.trim()
+    }
+}
+
+const validateTransactionCreateInput = ({
     type,
     accountId,
     sourceAccountId,
@@ -17,6 +114,13 @@ const validateTransactionInput = ({
     }
 
     const normalizedType = type.trim().toLowerCase();
+
+    if (!['income', 'expense', 'transfer'].includes(normalizedType)) {
+        return {
+            valid: false,
+            message: 'Invalid transaction type',
+        };
+    }
 
     if (
         (normalizedType === 'income' || normalizedType === 'expense')
@@ -58,60 +162,48 @@ const validateTransactionInput = ({
         };
     }
 
-    if (!Number.isFinite(amount)) {
-        return {
-            valid: false,
-            message: 'Transaction amount must be a number',
-        };
+    const amountValidation = validateAmount(amount);
+
+    if (!amountValidation.valid) {
+        return amountValidation;
     }
 
-    if (amount <= 0) {
-        return {
-            valid: false,
-            message: 'Transaction amount must be greater than zero',
-        };
+    let validatedCategory;
+    if (category !== undefined) {
+        const categoryValidation = validateCategory(category);
+
+        if (!categoryValidation.valid) {
+            return categoryValidation;
+        }
+
+        validatedCategory = categoryValidation.data;
     }
 
-    if (Math.round(amount * 10) !== amount * 10) {
-        return {
-            valid: false,
-            message: 'Transaction amount must have at most one decimal place',
-        };
+    let validatedSubCategory;
+    if (subCategory !== undefined) {
+        const subCategoryValidation = validateSubCategory(subCategory);
+
+        if (!subCategoryValidation.valid) {
+            return subCategoryValidation;
+        }
+
+        validatedSubCategory = subCategoryValidation.data;
     }
 
-    if (category !== undefined && typeof category !== 'string') {
-        return {
-            valid: false,
-            message: 'Transaction category must be a string',
-        };
+    const dateValidation = validateTransactionDate(transactionDate);
+
+    if (!dateValidation.valid) {
+        return dateValidation;
     }
 
-    if (subCategory !== undefined && typeof subCategory !== 'string') {
-        return {
-            valid: false,
-            message: 'Transaction subCategory must be a string',
-        };
-    }
+    let validatedDescription;
+    if (description !== undefined) {
+        const descriptionValidation = validateDescription(description);
 
-    if (typeof transactionDate !== 'string') {
-        return {
-            valid: false,
-            message: 'Transaction date must be a string',
-        };
-    }
-
-    if (description !== undefined && typeof description !== 'string') {
-        return {
-            valid: false,
-            message: 'Transaction description must be a string',
-        };
-    }
-
-    if (description !== undefined && description.trim().length > 400 ) {
-        return {
-            valid: false,
-            message: 'Transaction description must be at most 400 characters long',
-        };
+        if (!descriptionValidation.valid) {
+            return descriptionValidation;
+        }
+        validatedDescription = descriptionValidation.data;
     }
 
     return {
@@ -119,14 +211,107 @@ const validateTransactionInput = ({
         data: {
             type: normalizedType,
             amount,
-            transactionDate,
-            ...(normalizedType === 'income' || normalizedType === 'expense' ? { accountId } : {}),
-            ...(normalizedType === 'transfer' ? { sourceAccountId, destinationAccountId } : {}),
-            ...(category !== undefined && { category }),
-            ...(subCategory !== undefined && { subCategory }),
-            ...(description !== undefined && { description: description.trim() }),
+            transactionDate: dateValidation.data,
+            ...(normalizedType === 'income' || normalizedType === 'expense'
+                ? { accountId }
+                : {}),
+            ...(normalizedType === 'transfer'
+                ? { sourceAccountId, destinationAccountId }
+                : {}),
+            ...(category !== undefined && {
+                category: validatedCategory
+            }),
+            ...(subCategory !== undefined && {
+                subCategory: validatedSubCategory
+            }),
+            ...(description !== undefined && {
+                description: validatedDescription
+            }),
         },
     };
 };
 
-export default validateTransactionInput;
+const validateTransactionUpdateInput = (updates) => {
+
+    const allowedFields = [
+        'amount',
+        'category',
+        'subCategory',
+        'transactionDate',
+        'description',
+    ];
+
+    const updateData = {};
+
+    for (const field of allowedFields) {
+        if (Object.prototype.hasOwnProperty.call(updates, field)) {
+            updateData[field] = updates[field];
+        }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+        return {
+            valid: false,
+            error: 'NO_FIELDS_TO_UPDATE',
+            message: 'No fields provided for update',
+        };
+    }
+
+    if (updateData.amount !== undefined) {
+        const amountValidation = validateAmount(updateData.amount);
+
+        if (!amountValidation.valid) {
+            return amountValidation;
+        }
+    }
+
+    if (updateData.category !== undefined) {
+        const categoryValidation = validateCategory(updateData.category);
+
+        if (!categoryValidation.valid) {
+            return categoryValidation;
+        }
+
+        updateData.category = categoryValidation.data;
+    }
+
+    if (updateData.subCategory !== undefined) {
+        const subCategoryValidation = validateSubCategory(updateData.subCategory);
+
+        if (!subCategoryValidation.valid) {
+            return subCategoryValidation;
+        }
+
+        updateData.subCategory = subCategoryValidation.data;
+    }
+
+    if (updateData.transactionDate !== undefined) {
+        const dateValidation = validateTransactionDate(updateData.transactionDate);
+
+        if (!dateValidation.valid) {
+            return dateValidation;
+        }
+
+        updateData.transactionDate = dateValidation.data;
+    }
+
+    if (updateData.description !== undefined) {
+        const descriptionValidation = validateDescription(updateData.description);
+
+        if (!descriptionValidation.valid) {
+            return descriptionValidation;
+        }
+
+        updateData.description = descriptionValidation.data;
+    }
+
+    return {
+        valid: true,
+        data: updateData,
+    };
+};
+
+export {
+    validateTransactionCreateInput,
+    validateTransactionUpdateInput,
+};

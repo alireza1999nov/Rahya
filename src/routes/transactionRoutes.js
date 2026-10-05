@@ -1,18 +1,25 @@
 import express from 'express';
 import {
     createTransactionController,
-    getAccountTransactionsController
+    getAccountTransactionsController,
+    updateTransactionController
 } from '../controllers/transactionController.js';
 
 const router = express.Router();
 
-router.get('/accounts/:accountId/transactions',
+router.get(
+    '/accounts/:accountId/transactions',
     getAccountTransactionsController
 );
 
 router.post(
     '/transactions',
     createTransactionController
+);
+
+router.patch(
+    '/transactions/:transactionId',
+    updateTransactionController
 );
 
 export default router;

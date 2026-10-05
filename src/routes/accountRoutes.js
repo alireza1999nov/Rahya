@@ -7,11 +7,11 @@ const router = express.Router();
 
 router.post('/accounts', (req, res) => {
 
-    const userId = req.headers['x-user-id'];
+    const { userId, ...accountInput } = req.body;
 
     const result = createAccount({
         userId,
-        accountInput: req.body,
+        accountInput,
         userRepository,
         accountRepository
     });
