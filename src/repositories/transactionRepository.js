@@ -32,6 +32,18 @@ const transactionRepository = {
         }
         Object.assign(transaction, updates);
         return transaction;
+    },
+    delete(transactionId) {
+        const transaction = transactions.find(
+            transaction =>
+                transaction.id === transactionId &&
+                transaction.deletedAt === null
+        );
+        if (!transaction) {
+            return null;
+        }
+        transaction.deletedAt = new Date();
+        return transaction;
     }
 };
 
