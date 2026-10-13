@@ -68,9 +68,93 @@ const validateTransactionDate = (transactionDate) => {
         };
     }
 
+    const datePattern =
+        /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\+03:30$/;
+
+    const match = transactionDate.match(datePattern);
+
+    if (!match) {
+        return {
+            valid: false,
+            message: 'Transaction date must use YYYY-MM-DDTHH:mm:ss+03:30 format',
+        };
+    }
+
+    const [
+        ,
+        yearString,
+        monthString,
+        dayString,
+        hourString,
+        minuteString,
+        secondString,
+    ] = match;
+
+    const year = Number(yearString);
+    const month = Number(monthString);
+    const day = Number(dayString);
+    const hour = Number(hourString);
+    const minute = Number(minuteString);
+    const second = Number(secondString);
+
+    if (
+        year === 0
+        || month < 1
+        || month > 12
+        || hour > 23
+        || minute > 59
+        || second > 59
+    ) {
+        return {
+            valid: false,
+            message: 'Transaction date contains invalid date or time components',
+        };
+    }
+
+    const isLeapYear =
+        year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+
+    const daysInMonth = [
+        31,
+        isLeapYear ? 29 : 28,
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+
+    if (day < 1 || day > daysInMonth[month - 1]) {
+        return {
+            valid: false,
+            message: 'Transaction date contains an invalid calendar date',
+        };
+    }
+
+    const timestamp = Date.parse(transactionDate);
+
+    if (!Number.isFinite(timestamp)) {
+        return {
+            valid: false,
+            message: 'Transaction date is invalid',
+        };
+    }
+
+    if (timestamp > Date.now()) {
+        return {
+            valid: false,
+            message: 'Transaction date cannot be in the future',
+        };
+    }
+
     return {
         valid: true,
-        data: transactionDate
+        data: transactionDate,
     };
 };
 
