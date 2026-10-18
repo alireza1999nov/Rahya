@@ -8,6 +8,12 @@ const userSchema = new mongoose.Schema(
             default: () => randomUUID()
         },
 
+        name: {
+            type: String,
+            required: true,
+            trim: true
+        },
+
         email: {
             type: String,
             required: true,
@@ -29,8 +35,8 @@ const userSchema = new mongoose.Schema(
 
         status: {
             type: String,
-            enum: ['active', 'deactivated'],
-            default: 'active',
+            enum: ['pendingVerification', 'active', 'deactivated'],
+            default: 'pendingVerification',
             required: true
         }
     },

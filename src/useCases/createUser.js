@@ -1,22 +1,35 @@
-import {randomUUID} from 'node:crypto';
+import argon2 from 'argon2';
 import validateUserInput from '../validation/userValidation.js';
 
-const createUser = ({name}, userRepository) => {
-    const validation = validateUserInput({ name });
+const createUser = async (input, userRepository) => {
+    const validation = validateUserInput(input);
 
     if (!validation.valid) {
         return validation;
     }
 
-    const now = new Date();
+    const passwordHash = await argon2.hash(validation.data.password, {
+        type: argon2.argon2id
+    });
 
-    const user = {
-        id: randomUUID(),
+    const createdUser = await userRepository.create({
         name: validation.data.name,
-        createdAt: now,
-        updatedAt: now
+        email: validation.data.email,
+        passwordHash
+    });
+
+    return {
+        valid: true,
+        data: {
+            id: createdUser.id ?? createdUser._id,
+            name: createdUser.name,
+            email: createdUser.email,
+            emailVerifiedAt: createdUser.emailVerifiedAt,
+            status: createdUser.status,
+            createdAt: createdUser.createdAt,
+            updatedAt: createdUser.updatedAt
+        }
     };
-    return {valid: true, data: userRepository.create(user)};
 };
 
 export default createUser;

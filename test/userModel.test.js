@@ -5,6 +5,7 @@ import User from '../src/models/userModel.js';
 
 function createValidUser(overrides = {}) {
     return new User({
+        name: 'Test User',
         email: 'user@example.com',
         passwordHash: 'test-hash',
         ...overrides,
@@ -86,10 +87,10 @@ test('defaults emailVerifiedAt to null', () => {
     assert.equal(user.emailVerifiedAt, null);
 });
 
-test('defaults status to active', () => {
+test('defaults status to pendingVerification', () => {
     const user = createValidUser();
 
-    assert.equal(user.status, 'active');
+    assert.equal(user.status, 'pendingVerification');
 });
 
 test('accepts active status', async () => {
@@ -103,6 +104,14 @@ test('accepts active status', async () => {
 test('accepts deactivated status', async () => {
     const user = createValidUser({
         status: 'deactivated',
+    });
+
+    await user.validate();
+});
+
+test('accepts pendingVerification status', async () => {
+    const user = createValidUser({
+        status: 'pendingVerification',
     });
 
     await user.validate();
@@ -139,7 +148,7 @@ test('excludes passwordHash from query results by default', () => {
 test('restricts status to the approved enum values', () => {
     assert.deepEqual(
         User.schema.path('status').enumValues,
-        ['active', 'deactivated'],
+        ['pendingVerification', 'active', 'deactivated'],
     );
 });
 

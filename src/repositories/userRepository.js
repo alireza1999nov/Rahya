@@ -1,12 +1,13 @@
-const users = [];
+import User from "../models/userModel.js";
 
 const userRepository = {
-    create(user) {
-        users.push(user);
+    async create(userData) {
+        const user = await User.create(userData);
         return user;
     },
-    findById(userId) {
-        return users.find(user => user.id === userId) ?? null;
+
+    async findById(userId) {
+        return User.findById(userId);
     }
 };
 
