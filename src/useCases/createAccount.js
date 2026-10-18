@@ -1,16 +1,28 @@
-import {randomUUID} from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import validateAccountInput from '../validation/accountValidation.js';
 
-const createAccount = ({userId, accountInput, userRepository, accountRepository}) => {
+const createAccount = async ({
+    userId,
+    accountInput,
+    userRepository,
+    accountRepository
+}) => {
+    if (typeof userId !== 'string' || userId.trim() === '') {
+        return {
+            valid: false,
+            error: 'USER_NOT_FOUND',
+            message: 'User not found'
+        };
+    }
 
-    const user = userRepository.findById(userId);
+    const user = await userRepository.findById(userId);
 
     if (!user) {
         return {
             valid: false,
             error: 'USER_NOT_FOUND',
             message: 'User not found'
-        }
+        };
     }
 
     const validation = validateAccountInput(accountInput);
@@ -19,18 +31,20 @@ const createAccount = ({userId, accountInput, userRepository, accountRepository}
         return validation;
     }
 
-    const existingAccount = accountRepository.findByUserIdAndName(userId, validation.data.name);
+    const existingAccount = await accountRepository.findByUserIdAndName(
+        userId,
+        validation.data.name
+    );
 
     if (existingAccount) {
         return {
             valid: false,
             error: 'ACCOUNT_NAME_ALREADY_EXISTS',
             message: 'An account with this name already exists for the user'
-        }
+        };
     }
 
-    const userAccounts = accountRepository.findByUserId(userId);
-
+    const userAccounts = await accountRepository.findByUserId(userId);
     const now = new Date();
 
     const account = {
@@ -40,15 +54,33 @@ const createAccount = ({userId, accountInput, userRepository, accountRepository}
         type: validation.data.type,
         openingBalance: validation.data.openingBalance,
         currency: 'Toman',
-        ...(validation.data.description !== undefined && { description: validation.data.description }),
+        ...(validation.data.description !== undefined && {
+            description: validation.data.description
+        }),
         isDefault: userAccounts.length === 0,
         isArchived: false,
         createdAt: now
     };
 
+    const createdAccount = await accountRepository.create(account);
+
     return {
         valid: true,
-        data: accountRepository.create(account)
+        data: {
+            id: createdAccount._id,
+            userId: createdAccount.userId,
+            name: createdAccount.name,
+            type: createdAccount.type,
+            openingBalance: createdAccount.openingBalance,
+            currency: createdAccount.currency,
+            ...(createdAccount.description !== undefined && {
+                description: createdAccount.description
+            }),
+            isDefault: createdAccount.isDefault,
+            isArchived: createdAccount.isArchived,
+            createdAt: createdAccount.createdAt,
+            updatedAt: createdAccount.updatedAt
+        }
     };
 };
 
