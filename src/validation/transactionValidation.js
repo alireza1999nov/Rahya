@@ -328,7 +328,10 @@ const validateTransactionUpdateInput = (updates) => {
     const updateData = {};
 
     for (const field of allowedFields) {
-        if (Object.prototype.hasOwnProperty.call(updates, field)) {
+        if (
+            Object.prototype.hasOwnProperty.call(updates, field) &&
+            updates[field] !== undefined
+        ) {
             updateData[field] = updates[field];
         }
     }

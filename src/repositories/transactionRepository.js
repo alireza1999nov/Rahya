@@ -1,50 +1,93 @@
-const transactions = [];
+import Transaction from '../models/transactionModel.js';
+
+const toTransaction = (document) => {
+    if (!document) {
+        return null;
+    }
+
+    const transaction =
+        typeof document.toObject === 'function'
+            ? document.toObject()
+            : document;
+
+    const { _id, id: existingId, ...data } = transaction;
+
+    return {
+        ...data,
+        id: _id ?? existingId,
+    };
+};
 
 const transactionRepository = {
-    create(transaction) {
-        transactions.push(transaction);
-        return transaction;
+    async create(transaction) {
+        const { id, _id, ...transactionData } = transaction;
+
+        const createdTransaction = await Transaction.create({
+            ...transactionData,
+            ...(id !== undefined ? { _id: id } : {}),
+        });
+
+        return toTransaction(createdTransaction);
     },
-    findByRelatedAccountId(accountId) {
-        return transactions.filter(
-            transaction => (
-                transaction.accountId === accountId ||
-                transaction.sourceAccountId === accountId ||
-                transaction.destinationAccountId === accountId
-            ) &&
-            transaction.deletedAt === null
-        );
+
+    async findByRelatedAccountId(accountId) {
+        const transactions = await Transaction.find({
+            $or: [
+                { accountId },
+                { sourceAccountId: accountId },
+                { destinationAccountId: accountId },
+            ],
+            deletedAt: null,
+        }).lean();
+
+        return transactions.map(toTransaction);
     },
-    findById(transactionId) {
-        return transactions.find(
-            transaction => transaction.id === transactionId &&
-            transaction.deletedAt === null
-        );
+
+    async findById(transactionId) {
+        const transaction = await Transaction.findOne({
+            _id: transactionId,
+            deletedAt: null,
+        }).lean();
+
+        return toTransaction(transaction);
     },
-    update(transactionId, updates) {
-        const transaction = transactions.find(
-            transaction =>
-                transaction.id === transactionId &&
-                transaction.deletedAt === null
-        );
-        if (!transaction) {
-            return null;
-        }
-        Object.assign(transaction, updates);
-        return transaction;
+
+    async update(transactionId, updates) {
+        const updatedTransaction = await Transaction.findOneAndUpdate(
+            {
+                _id: transactionId,
+                deletedAt: null,
+            },
+            {
+                $set: updates,
+            },
+            {
+                returnDocument: 'after',
+                runValidators: true,
+            },
+        ).lean();
+
+        return toTransaction(updatedTransaction);
     },
-    delete(transactionId) {
-        const transaction = transactions.find(
-            transaction =>
-                transaction.id === transactionId &&
-                transaction.deletedAt === null
-        );
-        if (!transaction) {
-            return null;
-        }
-        transaction.deletedAt = new Date();
-        return transaction;
-    }
+
+    async delete(transactionId) {
+        const deletedTransaction = await Transaction.findOneAndUpdate(
+            {
+                _id: transactionId,
+                deletedAt: null,
+            },
+            {
+                $set: {
+                    deletedAt: new Date(),
+                },
+            },
+            {
+                returnDocument: 'after',
+            },
+        ).lean();
+
+        return toTransaction(deletedTransaction);
+    },
 };
 
 export default transactionRepository;

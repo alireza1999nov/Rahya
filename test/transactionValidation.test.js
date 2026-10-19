@@ -1,12 +1,8 @@
-
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import createTransaction from '../src/useCases/createTransaction.js';
 import updateTransaction from '../src/useCases/updateTransaction.js';
-
-import transactionRepository from '../src/repositories/transactionRepository.js';
-import accountRepository from '../src/repositories/accountRepository.js';
 
 import {
     validateTransactionCreateInput,
@@ -15,15 +11,6 @@ import {
 
 // 2026-10-13 15:00:00 in Asia/Tehran (+03:30)
 const NOW = new Date('2026-10-13T11:30:00.000Z');
-const NOW_LOCAL = '2026-10-13T15:00:00+03:30';
-
-const createAccount = (id) => {
-    accountRepository.create({
-        id,
-        userId: `user-${id}`,
-        name: `Test account ${id}`,
-    });
-};
 
 const createInputForType = (type, transactionDate) => {
     if (type === 'transfer') {
@@ -99,7 +86,11 @@ test('accepts a valid date for every transaction type', (t) => {
             createInputForType(type, '2026-10-13T14:30:00+03:30'),
         );
 
-        assert.equal(result.valid, true, `Expected ${type} date to be valid`);
+        assert.equal(
+            result.valid,
+            true,
+            `Expected ${type} date to be valid`,
+        );
         assert.equal(
             result.data.transactionDate,
             '2026-10-13T14:30:00+03:30',
@@ -208,7 +199,7 @@ test('accepts a date exactly equal to now', (t) => {
     withFixedTime(t);
 
     const result = validateTransactionCreateInput(
-        createInputForType('income', NOW_LOCAL),
+        createInputForType('income', '2026-10-13T15:00:00+03:30'),
     );
 
     assert.equal(result.valid, true);
@@ -232,14 +223,54 @@ test('rejects dates after now for every transaction type', (t) => {
     }
 });
 
-test('rejects non-string transaction dates', (t) => {
-    withFixedTime(t);
-
+test('rejects non-string transaction dates', () => {
     for (const transactionDate of [undefined, null, 123, new Date(NOW), {}]) {
         const result = validateTransactionCreateInput({
-            ...createInputForType('income', NOW_LOCAL),
+            ...createInputForType(
+                'income',
+                '2026-10-13T15:00:00+03:30',
+            ),
             transactionDate,
         });
+
+        assert.equal(result.valid, false);
+    }
+});
+
+test('allows only explicitly supported fields in transaction updates', () => {
+    const result = validateTransactionUpdateInput({
+        amount: 150,
+        category: 'Transport',
+        type: 'transfer',
+        accountId: 'another-account',
+        sourceAccountId: 'another-source',
+        destinationAccountId: 'another-destination',
+    });
+
+    assert.equal(result.valid, true);
+
+    assert.deepEqual(result.data, {
+        amount: 150,
+        category: 'Transport',
+    });
+});
+
+test('rejects updates containing only undefined values', () => {
+    const result = validateTransactionUpdateInput({
+        amount: undefined,
+        category: undefined,
+    });
+
+    assert.equal(result.valid, false);
+    assert.equal(result.error, 'NO_FIELDS_TO_UPDATE');
+});
+
+test('rejects null values for amount and category', () => {
+    for (const updates of [
+        { amount: null },
+        { category: null },
+    ]) {
+        const result = validateTransactionUpdateInput(updates);
 
         assert.equal(result.valid, false);
     }
@@ -280,78 +311,92 @@ test('accepts a valid past date in update input', (t) => {
     );
 });
 
-test('does not create an income transaction with a future date', (t) => {
+test('does not create an income transaction with a future date', async (t) => {
     withFixedTime(t);
 
-    const accountId = 'test-future-income-account';
-    createAccount(accountId);
+    const accountRepository = {
+        async findById() {
+            assert.fail('Account lookup must not occur for invalid input');
+        },
+    };
 
-    const result = createTransaction(
+    const transactionRepository = {
+        async create() {
+            assert.fail('Transaction must not be created for invalid input');
+        },
+    };
+
+    const result = await createTransaction(
         {
             ...createInputForType('income', '2026-10-13T15:00:01+03:30'),
-            accountId,
+            accountId: 'test-future-income-account',
         },
         transactionRepository,
         accountRepository,
     );
 
     assert.equal(result.valid, false);
-    assert.equal(
-        transactionRepository.findByRelatedAccountId(accountId).length,
-        0,
-    );
+    assert.match(result.message, /future/i);
 });
 
-test('does not create an expense transaction with an impossible date', (t) => {
+test('does not create an expense transaction with an impossible date', async (t) => {
     withFixedTime(t);
 
-    const accountId = 'test-invalid-expense-account';
-    createAccount(accountId);
+    const accountRepository = {
+        async findById() {
+            assert.fail('Account lookup must not occur for invalid input');
+        },
+    };
 
-    const result = createTransaction(
+    const transactionRepository = {
+        async create() {
+            assert.fail('Transaction must not be created for invalid input');
+        },
+    };
+
+    const result = await createTransaction(
         {
             ...createInputForType('expense', '2026-02-30T14:30:00+03:30'),
-            accountId,
+            accountId: 'test-invalid-expense-account',
         },
         transactionRepository,
         accountRepository,
     );
 
     assert.equal(result.valid, false);
-    assert.equal(
-        transactionRepository.findByRelatedAccountId(accountId).length,
-        0,
-    );
+    assert.match(result.message, /calendar date/i);
 });
 
-test('does not create a transfer with an invalid offset', (t) => {
+test('does not create a transfer with an invalid offset', async (t) => {
     withFixedTime(t);
 
-    const sourceAccountId = 'test-invalid-transfer-source';
-    const destinationAccountId = 'test-invalid-transfer-destination';
+    const accountRepository = {
+        async findById() {
+            assert.fail('Account lookup must not occur for invalid input');
+        },
+    };
 
-    const result = createTransaction(
+    const transactionRepository = {
+        async create() {
+            assert.fail('Transaction must not be created for invalid input');
+        },
+    };
+
+    const result = await createTransaction(
         {
             ...createInputForType('transfer', '2026-10-13T14:30:00+04:30'),
-            sourceAccountId,
-            destinationAccountId,
+            sourceAccountId: 'test-invalid-transfer-source',
+            destinationAccountId: 'test-invalid-transfer-destination',
         },
         transactionRepository,
         accountRepository,
     );
 
     assert.equal(result.valid, false);
-    assert.equal(
-        transactionRepository.findByRelatedAccountId(sourceAccountId).length,
-        0,
-    );
-    assert.equal(
-        transactionRepository.findByRelatedAccountId(destinationAccountId).length,
-        0,
-    );
+    assert.match(result.message, /format/i);
 });
 
-test('does not mutate an income transaction when its date is invalid', (t) => {
+test('does not mutate an income transaction when its date is invalid', async (t) => {
     withFixedTime(t);
 
     const transactionId = 'test-income-update-invalid-date';
@@ -367,28 +412,40 @@ test('does not mutate an income transaction when its date is invalid', (t) => {
         deletedAt: null,
     };
 
-    transactionRepository.create(originalTransaction);
-    const originalSnapshot = { ...originalTransaction };
+    let storedTransaction = { ...originalTransaction };
+    let updateCalled = false;
+
+    const transactionRepository = {
+        async findById(id) {
+            return id === transactionId ? { ...storedTransaction } : null;
+        },
+        async update(id, updates) {
+            updateCalled = true;
+            storedTransaction = { ...storedTransaction, ...updates };
+            return { ...storedTransaction };
+        },
+    };
+
+    const originalSnapshot = { ...storedTransaction };
 
     for (const transactionDate of [
         '2026-02-30T14:30:00+03:30',
         '2026-10-13T15:00:01+03:30',
     ]) {
-        const result = updateTransaction(
+        const result = await updateTransaction(
             transactionId,
             { transactionDate },
             transactionRepository,
         );
 
         assert.equal(result.valid, false);
-        assert.deepEqual(
-            transactionRepository.findById(transactionId),
-            originalSnapshot,
-        );
+        assert.deepEqual(storedTransaction, originalSnapshot);
     }
+
+    assert.equal(updateCalled, false);
 });
 
-test('does not mutate an expense transaction when its date is invalid', (t) => {
+test('does not mutate an expense transaction when its date is invalid', async (t) => {
     withFixedTime(t);
 
     const transactionId = 'test-expense-update-invalid-date';
@@ -404,28 +461,40 @@ test('does not mutate an expense transaction when its date is invalid', (t) => {
         deletedAt: null,
     };
 
-    transactionRepository.create(originalTransaction);
-    const originalSnapshot = { ...originalTransaction };
+    let storedTransaction = { ...originalTransaction };
+    let updateCalled = false;
+
+    const transactionRepository = {
+        async findById(id) {
+            return id === transactionId ? { ...storedTransaction } : null;
+        },
+        async update(id, updates) {
+            updateCalled = true;
+            storedTransaction = { ...storedTransaction, ...updates };
+            return { ...storedTransaction };
+        },
+    };
+
+    const originalSnapshot = { ...storedTransaction };
 
     for (const transactionDate of [
         '2026-02-30T14:30:00+03:30',
         '2026-10-13T15:00:01+03:30',
     ]) {
-        const result = updateTransaction(
+        const result = await updateTransaction(
             transactionId,
             { transactionDate },
             transactionRepository,
         );
 
         assert.equal(result.valid, false);
-        assert.deepEqual(
-            transactionRepository.findById(transactionId),
-            originalSnapshot,
-        );
+        assert.deepEqual(storedTransaction, originalSnapshot);
     }
+
+    assert.equal(updateCalled, false);
 });
 
-test('does not allow transfer updates', (t) => {
+test('does not allow transfer updates', async (t) => {
     withFixedTime(t);
 
     const transactionId = 'test-transfer-update-forbidden';
@@ -441,10 +510,22 @@ test('does not allow transfer updates', (t) => {
         deletedAt: null,
     };
 
-    transactionRepository.create(originalTransaction);
-    const originalSnapshot = { ...originalTransaction };
+    let storedTransaction = { ...originalTransaction };
+    let updateCalled = false;
 
-    const result = updateTransaction(
+    const transactionRepository = {
+        async findById(id) {
+            return id === transactionId ? { ...storedTransaction } : null;
+        },
+        async update() {
+            updateCalled = true;
+            return null;
+        },
+    };
+
+    const originalSnapshot = { ...storedTransaction };
+
+    const result = await updateTransaction(
         transactionId,
         { amount: 200 },
         transactionRepository,
@@ -452,8 +533,6 @@ test('does not allow transfer updates', (t) => {
 
     assert.equal(result.valid, false);
     assert.equal(result.error, 'TRANSFER_UPDATE_NOT_ALLOWED');
-    assert.deepEqual(
-        transactionRepository.findById(transactionId),
-        originalSnapshot,
-    );
+    assert.equal(updateCalled, false);
+    assert.deepEqual(storedTransaction, originalSnapshot);
 });

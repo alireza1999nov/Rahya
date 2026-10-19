@@ -6,8 +6,8 @@ import getAccountTransactions from '../useCases/getAccountTransactions.js';
 import updateTransaction from '../useCases/updateTransaction.js';
 import deleteTransaction from '../useCases/deleteTransaction.js';
 
-const createTransactionController = (req, res) => {
-    const result = createTransaction(
+const createTransactionController = async (req, res) => {
+    const result = await createTransaction(
         req.body,
         transactionRepository,
         accountRepository
@@ -16,18 +16,17 @@ const createTransactionController = (req, res) => {
     if (!result.valid) {
         return res.status(400).json({
             error: result.error ?? 'VALIDATION_ERROR',
-            message: result.message
+            message: result.message,
         });
     }
 
     return res.status(201).json(result.data);
 };
 
-
-const getAccountTransactionsController = (req, res) => {
+const getAccountTransactionsController = async (req, res) => {
     const { accountId } = req.params;
 
-    const result = getAccountTransactions(
+    const result = await getAccountTransactions(
         accountId,
         transactionRepository,
         accountRepository
@@ -36,17 +35,17 @@ const getAccountTransactionsController = (req, res) => {
     if (!result.valid) {
         return res.status(404).json({
             error: result.error,
-            message: result.message
+            message: result.message,
         });
     }
 
     return res.status(200).json(result.data);
 };
 
-const updateTransactionController = (req, res) => {
+const updateTransactionController = async (req, res) => {
     const { transactionId } = req.params;
 
-    const result = updateTransaction(
+    const result = await updateTransaction(
         transactionId,
         req.body,
         transactionRepository
@@ -58,20 +57,20 @@ const updateTransactionController = (req, res) => {
 
         return res.status(statusCode).json({
             error: result.error ?? 'VALIDATION_ERROR',
-            message: result.message
+            message: result.message,
         });
     }
 
     return res.status(200).json(result.data);
 };
 
-const deleteTransactionController = (req, res) => {
+const deleteTransactionController = async (req, res) => {
     const { transactionId } = req.params;
 
-    const result = deleteTransaction(
+    const result = await deleteTransaction(
         transactionId,
         transactionRepository
-    )
+    );
 
     if (!result.valid) {
         const statusCode =
@@ -79,9 +78,10 @@ const deleteTransactionController = (req, res) => {
 
         return res.status(statusCode).json({
             error: result.error,
-            message: result.message
+            message: result.message,
         });
     }
+
     return res.status(200).json(result.data);
 };
 
@@ -89,5 +89,5 @@ export {
     createTransactionController,
     getAccountTransactionsController,
     updateTransactionController,
-    deleteTransactionController
+    deleteTransactionController,
 };

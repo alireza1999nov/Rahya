@@ -1,8 +1,9 @@
-const deleteTransaction = (
+const deleteTransaction = async (
     transactionId,
     transactionRepository
 ) => {
-    const transaction = transactionRepository.findById(transactionId);
+    const transaction = await transactionRepository.findById(transactionId);
+
     if (!transaction) {
         return {
             valid: false,
@@ -19,12 +20,20 @@ const deleteTransaction = (
         };
     }
 
-    const deletedTransaction = transactionRepository.delete(transactionId);
+    const deletedTransaction = await transactionRepository.delete(transactionId);
+
+    if (!deletedTransaction) {
+        return {
+            valid: false,
+            error: "TRANSACTION_NOT_FOUND",
+            message: "Transaction not found",
+        };
+    }
 
     return {
         valid: true,
         message: "TRANSACTION_DELETED",
-        data: deletedTransaction
+        data: deletedTransaction,
     };
 };
 

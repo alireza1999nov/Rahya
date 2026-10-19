@@ -1,6 +1,6 @@
 import { validateTransactionUpdateInput } from "../validation/transactionValidation.js";
 
-const updateTransaction = (
+const updateTransaction = async (
     transactionId,
     updates,
     transactionRepository
@@ -11,7 +11,7 @@ const updateTransaction = (
         return validation;
     }
 
-    const transaction = transactionRepository.findById(transactionId);
+    const transaction = await transactionRepository.findById(transactionId);
 
     if (!transaction) {
         return {
@@ -29,10 +29,18 @@ const updateTransaction = (
         };
     }
 
-    const updatedTransaction = transactionRepository.update(
+    const updatedTransaction = await transactionRepository.update(
         transactionId,
         validation.data
     );
+
+    if (!updatedTransaction) {
+        return {
+            valid: false,
+            error: "TRANSACTION_NOT_FOUND",
+            message: "Transaction not found",
+        };
+    }
 
     return {
         valid: true,
