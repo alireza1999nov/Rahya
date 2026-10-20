@@ -5,6 +5,7 @@ import {
     updateTransactionController,
     deleteTransactionController
 } from '../controllers/transactionController.js';
+import requireJsonBody from '../middleware/requireJsonBody.js';
 
 const router = express.Router();
 
@@ -15,11 +16,13 @@ router.get(
 
 router.post(
     '/transactions',
+    requireJsonBody,
     createTransactionController
 );
 
 router.patch(
     '/transactions/:transactionId',
+    requireJsonBody,
     updateTransactionController
 );
 

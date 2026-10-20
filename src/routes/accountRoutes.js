@@ -2,10 +2,11 @@ import express from 'express';
 import createAccount from '../useCases/createAccount.js';
 import userRepository from '../repositories/userRepository.js';
 import accountRepository from '../repositories/accountRepository.js';
+import requireJsonBody from '../middleware/requireJsonBody.js';
 
 const router = express.Router();
 
-router.post('/accounts', async (req, res, next) => {
+router.post('/accounts', requireJsonBody, async (req, res, next) => {
     try {
         const { userId, ...accountInput } = req.body;
 
@@ -29,11 +30,25 @@ router.post('/accounts', async (req, res, next) => {
         }
 
         return res.status(201).json(result.data);
+
     } catch (error) {
-        if (error.code === 11000) {
+        const isDuplicateAccountName =
+            error.code === 11000 &&
+            (
+                (
+                    error.keyPattern?.userId === 1 &&
+                    error.keyPattern?.name === 1
+                ) ||
+                (
+                    error.keyValue?.userId !== undefined &&
+                    error.keyValue?.name !== undefined
+                )
+            );
+
+        if (isDuplicateAccountName) {
             return res.status(409).json({
                 error: 'ACCOUNT_NAME_ALREADY_EXISTS',
-                message: 'An account with this name already exists for the user'
+                message: 'An account with this name already exists for the user',
             });
         }
 

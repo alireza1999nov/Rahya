@@ -32,7 +32,14 @@ test('transaction route integration tests', async (t) => {
         destination: randomUUID(),
     };
 
-    const allAccountIds = Object.values(accountIds);
+    const archivedAccountId = randomUUID();
+    const orphanAccountId = randomUUID();
+
+    const allAccountIds = [
+    ...Object.values(accountIds),
+    archivedAccountId,
+    orphanAccountId,
+    ];
 
     let server;
     let baseUrl;
@@ -40,6 +47,8 @@ test('transaction route integration tests', async (t) => {
     let incomeTransactionId;
     let expenseTransactionId;
     let transferTransactionId;
+    let archivedAccountTransactionId;
+    let orphanTransactionId;
 
     const transactionDate = '2026-10-10T12:00:00+03:30';
 
@@ -79,6 +88,21 @@ test('transaction route integration tests', async (t) => {
                 type: 'bank',
                 openingBalance: 1000,
             },
+            {
+                _id: archivedAccountId,
+                userId,
+                name: 'Transaction Route Archived',
+                type: 'bank',
+                openingBalance: 1000,
+                isArchived: true,
+            },
+            {
+                _id: orphanAccountId,
+                userId,
+                name: 'Transaction Route Orphan',
+                type: 'bank',
+                openingBalance: 1000,
+            }
         ]);
 
         await new Promise((resolve) => {
@@ -212,6 +236,98 @@ test('transaction route integration tests', async (t) => {
         );
 
         await t.test(
+            'PATCH rejects updating a transaction linked to an archived account',
+            async () => {
+                const transaction = await Transaction.create({
+                    _id: randomUUID(),
+                    type: 'income',
+                    accountId: archivedAccountId,
+                    amount: 100,
+                    category: 'Salary',
+                    transactionDate,
+                });
+
+                archivedAccountTransactionId = transaction._id;
+
+                const response = await fetch(
+                    `${baseUrl}/transactions/${archivedAccountTransactionId}`,
+                    {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            amount: 200,
+                        }),
+                    },
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 409);
+                assert.equal(body.error, 'ACCOUNT_ARCHIVED');
+                assert.equal(typeof body.message, 'string');
+
+                const persisted = await Transaction.findById(
+                    archivedAccountTransactionId,
+                ).lean();
+
+                assert.equal(persisted.amount, 100);
+            },
+        );
+
+        await t.test(
+            'PATCH returns a safe integrity error when the linked account is missing',
+            async () => {
+                const transaction = await Transaction.create({
+                    _id: randomUUID(),
+                    type: 'income',
+                    accountId: orphanAccountId,
+                    amount: 100,
+                    category: 'Salary',
+                    transactionDate,
+                });
+
+                orphanTransactionId = transaction._id;
+
+                await Account.deleteOne({
+                    _id: orphanAccountId,
+                });
+
+                const response = await fetch(
+                    `${baseUrl}/transactions/${orphanTransactionId}`,
+                    {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            amount: 200,
+                        }),
+                    },
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 500);
+                assert.equal(body.error, 'DATA_INTEGRITY_ERROR');
+                assert.equal(
+                    body.message,
+                    'The transaction cannot be updated due to an internal data integrity issue',
+                );
+
+                assert.equal('details' in body, false);
+                assert.equal('stack' in body, false);
+
+                const persisted = await Transaction.findById(
+                    orphanTransactionId,
+                ).lean();
+
+                assert.equal(persisted.amount, 100);
+            },
+        );
+
+        await t.test(
             'PATCH rejects an invalid amount without mutating the transaction',
             async () => {
                 const persistedBefore = await Transaction.findById(
@@ -331,7 +447,7 @@ test('transaction route integration tests', async (t) => {
 
                 const body = await response.json();
 
-                assert.equal(response.status, 400);
+                assert.equal(response.status, 409);
                 assert.equal(
                     body.error,
                     'TRANSFER_UPDATE_NOT_ALLOWED',
@@ -356,7 +472,7 @@ test('transaction route integration tests', async (t) => {
 
                 const body = await response.json();
 
-                assert.equal(response.status, 400);
+                assert.equal(response.status, 409);
                 assert.equal(
                     body.error,
                     'TRANSFER_DELETE_NOT_ALLOWED',

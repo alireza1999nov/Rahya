@@ -22,7 +22,7 @@ test('request logging must not expose query string values', async () => {
         const { port } = server.address();
 
         const response = await fetch(
-            `http://127.0.0.1:${port}/health?token=secret-test-value`
+            `http://127.0.0.1:${port}/health/live?token=secret-test-value`
         );
 
         await response.arrayBuffer();
