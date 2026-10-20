@@ -396,6 +396,34 @@ test('transaction route integration tests', async (t) => {
         );
 
         await t.test(
+            'POST rejects a transaction on an archived account',
+            async () => {
+                const response = await fetch(
+                    `${baseUrl}/transactions`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: 'income',
+                            accountId: archivedAccountId,
+                            amount: 100,
+                            category: 'Salary',
+                            transactionDate,
+                        }),
+                    },
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 409);
+                assert.equal(body.error, 'ACCOUNT_ARCHIVED');
+                assert.equal(typeof body.message, 'string');
+            },
+        );
+
+        await t.test(
             'POST /transactions creates a transfer',
             async () => {
                 const response = await fetch(

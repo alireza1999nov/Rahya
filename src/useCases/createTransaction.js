@@ -27,6 +27,14 @@ const createTransaction = async (
                 message: 'Account not found',
             };
         }
+
+        if (account.isArchived) {
+            return {
+                valid: false,
+                error: 'ACCOUNT_ARCHIVED',
+                message: 'New transactions on archived accounts are prohibited',
+            };
+        }
     }
 
     if (validation.data.type === 'transfer') {
@@ -42,6 +50,14 @@ const createTransaction = async (
             };
         }
 
+        if (sourceAccount.isArchived) {
+            return {
+                valid: false,
+                error: 'ACCOUNT_ARCHIVED',
+                message: 'New transactions on archived accounts are prohibited',
+            };
+        }
+
         const destinationAccount = await accountRepository.findById(
             validation.data.destinationAccountId
         );
@@ -51,6 +67,14 @@ const createTransaction = async (
                 valid: false,
                 error: 'DESTINATION_ACCOUNT_NOT_FOUND',
                 message: 'Destination account not found',
+            };
+        }
+
+        if (destinationAccount.isArchived) {
+            return {
+                valid: false,
+                error: 'ACCOUNT_ARCHIVED',
+                message: 'New transactions on archived accounts are prohibited',
             };
         }
     }

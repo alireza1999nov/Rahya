@@ -15,7 +15,11 @@ const createTransactionController = async (req, res, next) => {
         );
 
         if (!result.valid) {
-            return res.status(400).json({
+            const statusByError = {
+                ACCOUNT_ARCHIVED: 409,
+            };
+
+            return res.status(statusByError[result.error] ?? 400).json({
                 error: result.error ?? 'VALIDATION_ERROR',
                 message: result.message,
             });
