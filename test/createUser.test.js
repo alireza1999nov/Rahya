@@ -18,7 +18,7 @@ function createUserRepositoryStub(createdUser = {}) {
                 name: userData.name,
                 email: userData.email,
                 emailVerifiedAt: null,
-                status: 'pendingVerification',
+                status: userData.status ?? 'active',
                 createdAt: new Date('2026-01-01T00:00:00.000Z'),
                 updatedAt: new Date('2026-01-01T00:00:00.000Z'),
                 ...createdUser,
@@ -64,6 +64,10 @@ test('creates a user with normalized data and an Argon2id password hash', async 
 
     assert.equal(savedUser.name, 'Test User');
     assert.equal(savedUser.email, 'user@example.com');
+    assert.equal(savedUser.status, 'active');
+    assert.equal(savedUser.emailVerifiedAt, null);
+    assert.equal(savedUser.status, 'active');
+    assert.equal(savedUser.emailVerifiedAt, null);
     assert.equal(typeof savedUser.passwordHash, 'string');
     assert.notEqual(savedUser.passwordHash, validInput.password);
 
@@ -90,7 +94,7 @@ test('returns public user data without exposing the password hash', async () => 
         name: 'Test User',
         email: 'user@example.com',
         emailVerifiedAt: null,
-        status: 'pendingVerification',
+        status: 'active',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });

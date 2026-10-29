@@ -8,6 +8,10 @@ const userRepository = {
 
     async findById(userId) {
         return User.findById(userId);
+    },
+
+    async findByEmailWithPasswordHash(email) {
+        return User.findOne({ email }).select('+passwordHash');
     }
 };
 

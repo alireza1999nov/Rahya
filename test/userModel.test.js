@@ -87,10 +87,10 @@ test('defaults emailVerifiedAt to null', () => {
     assert.equal(user.emailVerifiedAt, null);
 });
 
-test('defaults status to pendingVerification', () => {
+test('defaults status to active', () => {
     const user = createValidUser();
 
-    assert.equal(user.status, 'pendingVerification');
+    assert.equal(user.status, 'active');
 });
 
 test('accepts active status', async () => {

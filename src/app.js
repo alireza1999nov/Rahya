@@ -2,6 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 
 import userRoutes from './routes/userRoutes.js';
+import sessionRoutes from './routes/sessionRoutes.js';
 import accountRoutes from './routes/accountRoutes.js';
 import transactionRoutes from './routes/transactionRoutes.js';
 import errorHandler from './middleware/errorHandler.js';
@@ -19,6 +20,7 @@ app.use((req, res, next) => {
 });
 
 app.use(userRoutes);
+app.use(sessionRoutes);
 app.use(accountRoutes);
 app.use(transactionRoutes);
 

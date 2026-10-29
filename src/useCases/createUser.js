@@ -15,7 +15,9 @@ const createUser = async (input, userRepository) => {
     const createdUser = await userRepository.create({
         name: validation.data.name,
         email: validation.data.email,
-        passwordHash
+        passwordHash,
+        emailVerifiedAt: null,
+        status: 'active'
     });
 
     return {
