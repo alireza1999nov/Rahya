@@ -6,8 +6,12 @@ import app from '../src/app.js';
 import User from '../src/models/userModel.js';
 import Account from '../src/models/accountModel.js';
 import Transaction from '../src/models/transactionModel.js';
+import Session from '../src/models/sessionModel.js';
+import { hashSessionToken } from '../src/auth/sessionToken.js';
 
 import { randomUUID } from 'node:crypto';
+
+const accessToken = 'transaction-route-access-token';
 
 const testUri = process.env.MONGODB_TEST_URI;
 
@@ -57,6 +61,7 @@ test('transaction route integration tests', async (t) => {
             User.init(),
             Account.init(),
             Transaction.init(),
+            Session.init(),
         ]);
 
         await User.create({
@@ -64,6 +69,13 @@ test('transaction route integration tests', async (t) => {
             name: 'Transaction Route Test User',
             email: `transaction-route-${userId}@example.com`,
             passwordHash: 'integration-test-password-hash',
+            status: 'active',
+        });
+
+        await Session.create({
+            userId,
+            tokenHash: hashSessionToken(accessToken),
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         });
 
         await Account.create([
@@ -112,6 +124,33 @@ test('transaction route integration tests', async (t) => {
         baseUrl = `http://127.0.0.1:${server.address().port}`;
 
         await t.test(
+            'rejects transaction access without a session',
+            async () => {
+                const response = await fetch(
+                    `${baseUrl}/transactions`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: 'income',
+                            accountId: accountIds.primary,
+                            amount: 100,
+                            category: 'Salary',
+                            transactionDate,
+                        }),
+                    },
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 401);
+                assert.equal(body.error, 'UNAUTHENTICATED');
+            },
+        );
+
+        await t.test(
             'POST /transactions creates an income and returns 201',
             async () => {
                 const response = await fetch(
@@ -119,6 +158,7 @@ test('transaction route integration tests', async (t) => {
                     {
                         method: 'POST',
                         headers: {
+                            Authorization: `Bearer ${accessToken}`,
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
@@ -159,6 +199,7 @@ test('transaction route integration tests', async (t) => {
                     {
                         method: 'POST',
                         headers: {
+                            Authorization: `Bearer ${accessToken}`,
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
@@ -187,6 +228,11 @@ test('transaction route integration tests', async (t) => {
             async () => {
                 const response = await fetch(
                     `${baseUrl}/accounts/${accountIds.primary}/transactions`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                        },
+                    },
                 );
 
                 const body = await response.json();
@@ -211,6 +257,7 @@ test('transaction route integration tests', async (t) => {
                     {
                         method: 'PATCH',
                         headers: {
+                            Authorization: `Bearer ${accessToken}`,
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
@@ -254,6 +301,7 @@ test('transaction route integration tests', async (t) => {
                     {
                         method: 'PATCH',
                         headers: {
+                            Authorization: `Bearer ${accessToken}`,
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
@@ -299,6 +347,7 @@ test('transaction route integration tests', async (t) => {
                     {
                         method: 'PATCH',
                         headers: {
+                            Authorization: `Bearer ${accessToken}`,
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
@@ -339,6 +388,7 @@ test('transaction route integration tests', async (t) => {
                     {
                         method: 'PATCH',
                         headers: {
+                            Authorization: `Bearer ${accessToken}`,
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
@@ -364,6 +414,9 @@ test('transaction route integration tests', async (t) => {
                     `${baseUrl}/transactions/${expenseTransactionId}`,
                     {
                         method: 'DELETE',
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                        },
                     },
                 );
 
@@ -381,6 +434,11 @@ test('transaction route integration tests', async (t) => {
 
                 const listResponse = await fetch(
                     `${baseUrl}/accounts/${accountIds.primary}/transactions`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                        },
+                    },
                 );
 
                 const transactions = await listResponse.json();
@@ -403,6 +461,7 @@ test('transaction route integration tests', async (t) => {
                     {
                         method: 'POST',
                         headers: {
+                            Authorization: `Bearer ${accessToken}`,
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
@@ -431,6 +490,7 @@ test('transaction route integration tests', async (t) => {
                     {
                         method: 'POST',
                         headers: {
+                            Authorization: `Bearer ${accessToken}`,
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
@@ -465,6 +525,7 @@ test('transaction route integration tests', async (t) => {
                     {
                         method: 'PATCH',
                         headers: {
+                            Authorization: `Bearer ${accessToken}`,
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
@@ -495,6 +556,9 @@ test('transaction route integration tests', async (t) => {
                     `${baseUrl}/transactions/${transferTransactionId}`,
                     {
                         method: 'DELETE',
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                        },
                     },
                 );
 
@@ -522,6 +586,7 @@ test('transaction route integration tests', async (t) => {
                     {
                         method: 'POST',
                         headers: {
+                            Authorization: `Bearer ${accessToken}`,
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
@@ -543,6 +608,11 @@ test('transaction route integration tests', async (t) => {
             async () => {
                 const response = await fetch(
                     `${baseUrl}/accounts/${randomUUID()}/transactions`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                        },
+                    },
                 );
 
                 const body = await response.json();
@@ -560,6 +630,7 @@ test('transaction route integration tests', async (t) => {
                     {
                         method: 'PATCH',
                         headers: {
+                            Authorization: `Bearer ${accessToken}`,
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
@@ -582,6 +653,9 @@ test('transaction route integration tests', async (t) => {
                     `${baseUrl}/transactions/${randomUUID()}`,
                     {
                         method: 'DELETE',
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                        },
                     },
                 );
 
@@ -616,6 +690,10 @@ test('transaction route integration tests', async (t) => {
 
                 await Account.deleteMany({
                     _id: { $in: allAccountIds },
+                });
+
+                await Session.deleteMany({
+                    userId,
                 });
 
                 await User.deleteOne({

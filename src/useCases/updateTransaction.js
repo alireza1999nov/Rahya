@@ -1,14 +1,49 @@
 import { validateTransactionUpdateInput } from '../validation/transactionValidation.js';
 
+const relatedAccountIds = (transaction) => {
+    if (transaction.type === 'transfer') {
+        return [transaction.sourceAccountId, transaction.destinationAccountId];
+    }
+
+    return [transaction.accountId];
+};
+
 const updateTransaction = async (
     transactionId,
     updates,
     transactionRepository,
-    accountRepository
+    accountRepository,
+    currentUserId
 ) => {
     const transaction = await transactionRepository.findById(transactionId);
 
     if (!transaction) {
+        return {
+            valid: false,
+            error: 'TRANSACTION_NOT_FOUND',
+            message: 'Transaction not found',
+        };
+    }
+
+    const accounts = await Promise.all(
+        relatedAccountIds(transaction).map((accountId) =>
+            accountRepository.findById(accountId)
+        )
+    );
+
+    if (accounts.some((account) => !account)) {
+        return {
+            valid: false,
+            error: 'DATA_INTEGRITY_ERROR',
+            message: 'The transaction cannot be updated due to a data integrity issue',
+            details: {
+                transactionId,
+                accountIds: relatedAccountIds(transaction),
+            },
+        };
+    }
+
+    if (accounts.some((account) => account.userId !== currentUserId)) {
         return {
             valid: false,
             error: 'TRANSACTION_NOT_FOUND',
@@ -30,21 +65,7 @@ const updateTransaction = async (
         return validation;
     }
 
-    const account = await accountRepository.findById(
-        transaction.accountId
-    );
-
-    if (!account) {
-        return {
-            valid: false,
-            error: 'DATA_INTEGRITY_ERROR',
-            message: 'The transaction cannot be updated due to a data integrity issue',
-            details: {
-                transactionId,
-                accountId: transaction.accountId,
-            },
-        };
-    }
+    const [account] = accounts;
 
     if (account.isArchived) {
         return {

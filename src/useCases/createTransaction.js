@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { validateTransactionCreateInput } from '../validation/transactionValidation.js';
 
+const accountIsAccessible = (account, currentUserId) =>
+    Boolean(account) && account.userId === currentUserId;
+
 const createTransaction = async (
     transactionInput,
     transactionRepository,
-    accountRepository
+    accountRepository,
+    currentUserId
 ) => {
     const validation = validateTransactionCreateInput(transactionInput);
 
@@ -20,7 +24,7 @@ const createTransaction = async (
             validation.data.accountId
         );
 
-        if (!account) {
+        if (!accountIsAccessible(account, currentUserId)) {
             return {
                 valid: false,
                 error: 'ACCOUNT_NOT_FOUND',
@@ -42,7 +46,7 @@ const createTransaction = async (
             validation.data.sourceAccountId
         );
 
-        if (!sourceAccount) {
+        if (!accountIsAccessible(sourceAccount, currentUserId)) {
             return {
                 valid: false,
                 error: 'SOURCE_ACCOUNT_NOT_FOUND',
@@ -62,7 +66,7 @@ const createTransaction = async (
             validation.data.destinationAccountId
         );
 
-        if (!destinationAccount) {
+        if (!accountIsAccessible(destinationAccount, currentUserId)) {
             return {
                 valid: false,
                 error: 'DESTINATION_ACCOUNT_NOT_FOUND',

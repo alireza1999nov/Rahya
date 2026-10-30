@@ -436,6 +436,16 @@ test('does not mutate an income transaction when its date is invalid', async (t)
             transactionId,
             { transactionDate },
             transactionRepository,
+            {
+                async findById(accountId) {
+                    return {
+                        id: accountId,
+                        userId: 'user-1',
+                        isArchived: false,
+                    };
+                },
+            },
+            'user-1',
         );
 
         assert.equal(result.valid, false);
@@ -485,6 +495,16 @@ test('does not mutate an expense transaction when its date is invalid', async (t
             transactionId,
             { transactionDate },
             transactionRepository,
+            {
+                async findById(accountId) {
+                    return {
+                        id: accountId,
+                        userId: 'user-1',
+                        isArchived: false,
+                    };
+                },
+            },
+            'user-1',
         );
 
         assert.equal(result.valid, false);
@@ -529,6 +549,16 @@ test('does not allow transfer updates', async (t) => {
         transactionId,
         { amount: 200 },
         transactionRepository,
+        {
+            async findById(accountId) {
+                return {
+                    id: accountId,
+                    userId: 'user-1',
+                    isArchived: false,
+                };
+            },
+        },
+        'user-1',
     );
 
     assert.equal(result.valid, false);

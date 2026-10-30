@@ -1,10 +1,38 @@
+const relatedAccountIds = (transaction) => {
+    if (transaction.type === "transfer") {
+        return [transaction.sourceAccountId, transaction.destinationAccountId];
+    }
+
+    return [transaction.accountId];
+};
+
 const deleteTransaction = async (
     transactionId,
-    transactionRepository
+    transactionRepository,
+    accountRepository,
+    currentUserId
 ) => {
     const transaction = await transactionRepository.findById(transactionId);
 
     if (!transaction) {
+        return {
+            valid: false,
+            error: "TRANSACTION_NOT_FOUND",
+            message: "Transaction not found",
+        };
+    }
+
+    const accounts = await Promise.all(
+        relatedAccountIds(transaction).map((accountId) =>
+            accountRepository.findById(accountId)
+        )
+    );
+
+    if (
+        accounts.some(
+            (account) => !account || account.userId !== currentUserId
+        )
+    ) {
         return {
             valid: false,
             error: "TRANSACTION_NOT_FOUND",

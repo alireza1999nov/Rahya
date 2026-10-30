@@ -77,6 +77,34 @@ const createInMemoryTransactionRepository = (initialTransactions = []) => {
     };
 };
 
+const currentUserId = 'user-1';
+
+const createAccountRepository = (transaction) => {
+    const accounts = {};
+
+    if (transaction.type === 'transfer') {
+        accounts[transaction.sourceAccountId] = {
+            id: transaction.sourceAccountId,
+            userId: currentUserId,
+        };
+        accounts[transaction.destinationAccountId] = {
+            id: transaction.destinationAccountId,
+            userId: currentUserId,
+        };
+    } else if (transaction.accountId) {
+        accounts[transaction.accountId] = {
+            id: transaction.accountId,
+            userId: currentUserId,
+        };
+    }
+
+    return {
+        async findById(accountId) {
+            return accounts[accountId] ?? null;
+        },
+    };
+};
+
 const createDeleteSpyRepository = (repository) => {
     let deleteCalls = 0;
 
@@ -100,7 +128,12 @@ test('soft-deletes an income transaction', async () => {
     const transaction = createTransactionRecord('income');
     const repository = createInMemoryTransactionRepository([transaction]);
 
-    const result = await deleteTransaction(transaction.id, repository);
+    const result = await deleteTransaction(
+        transaction.id,
+        repository,
+        createAccountRepository(transaction),
+        currentUserId,
+    );
 
     assert.equal(result.valid, true);
     assert.equal(result.message, 'TRANSACTION_DELETED');
@@ -115,7 +148,12 @@ test('soft-deletes an expense transaction', async () => {
     const transaction = createTransactionRecord('expense');
     const repository = createInMemoryTransactionRepository([transaction]);
 
-    const result = await deleteTransaction(transaction.id, repository);
+    const result = await deleteTransaction(
+        transaction.id,
+        repository,
+        createAccountRepository(transaction),
+        currentUserId,
+    );
 
     assert.equal(result.valid, true);
     assert.equal(result.message, 'TRANSACTION_DELETED');
@@ -130,7 +168,12 @@ test('rejects deleting a transfer with the expected error', async () => {
     const transaction = createTransactionRecord('transfer');
     const repository = createInMemoryTransactionRepository([transaction]);
 
-    const result = await deleteTransaction(transaction.id, repository);
+    const result = await deleteTransaction(
+        transaction.id,
+        repository,
+        createAccountRepository(transaction),
+        currentUserId,
+    );
 
     assert.equal(result.valid, false);
     assert.equal(result.error, 'TRANSFER_DELETE_NOT_ALLOWED');
@@ -145,7 +188,12 @@ test('does not mutate a transfer when deletion is rejected', async () => {
     const repository = createInMemoryTransactionRepository([transaction]);
     const originalSnapshot = await repository.findById(transaction.id);
 
-    const result = await deleteTransaction(transaction.id, repository);
+    const result = await deleteTransaction(
+        transaction.id,
+        repository,
+        createAccountRepository(transaction),
+        currentUserId,
+    );
 
     assert.equal(result.valid, false);
     assert.deepEqual(
@@ -160,7 +208,12 @@ test('does not call repository.delete for a transfer', async () => {
     const repository = createInMemoryTransactionRepository([transaction]);
     const repositorySpy = createDeleteSpyRepository(repository);
 
-    const result = await deleteTransaction(transaction.id, repositorySpy);
+    const result = await deleteTransaction(
+        transaction.id,
+        repositorySpy,
+        createAccountRepository(transaction),
+        currentUserId,
+    );
 
     assert.equal(result.valid, false);
     assert.equal(result.error, 'TRANSFER_DELETE_NOT_ALLOWED');
@@ -176,7 +229,12 @@ test('returns TRANSACTION_NOT_FOUND for a nonexistent ID', async () => {
     const repository = createInMemoryTransactionRepository();
     const repositorySpy = createDeleteSpyRepository(repository);
 
-    const result = await deleteTransaction(randomUUID(), repositorySpy);
+    const result = await deleteTransaction(
+        randomUUID(),
+        repositorySpy,
+        createAccountRepository({ type: 'income' }),
+        currentUserId,
+    );
 
     assert.equal(result.valid, false);
     assert.equal(result.error, 'TRANSACTION_NOT_FOUND');
@@ -188,14 +246,50 @@ test('does not allow deleting the same transaction twice', async () => {
     const transaction = createTransactionRecord('income');
     const repository = createInMemoryTransactionRepository([transaction]);
 
-    const firstResult = await deleteTransaction(transaction.id, repository);
+    const accountRepository = createAccountRepository(transaction);
+
+    const firstResult = await deleteTransaction(
+        transaction.id,
+        repository,
+        accountRepository,
+        currentUserId,
+    );
 
     assert.equal(firstResult.valid, true);
     assert.ok(firstResult.data.deletedAt instanceof Date);
 
-    const secondResult = await deleteTransaction(transaction.id, repository);
+    const secondResult = await deleteTransaction(
+        transaction.id,
+        repository,
+        accountRepository,
+        currentUserId,
+    );
 
     assert.equal(secondResult.valid, false);
     assert.equal(secondResult.error, 'TRANSACTION_NOT_FOUND');
     assert.equal(secondResult.message, 'Transaction not found');
+});
+
+test('hides another user transfer behind TRANSACTION_NOT_FOUND', async () => {
+    const transaction = createTransactionRecord('transfer');
+    const repository = createInMemoryTransactionRepository([transaction]);
+    const accountRepository = {
+        async findById(accountId) {
+            return {
+                id: accountId,
+                userId: 'other-user',
+            };
+        },
+    };
+
+    const result = await deleteTransaction(
+        transaction.id,
+        repository,
+        accountRepository,
+        currentUserId,
+    );
+
+    assert.equal(result.valid, false);
+    assert.equal(result.error, 'TRANSACTION_NOT_FOUND');
+    assert.equal(await repository.findById(transaction.id) !== null, true);
 });

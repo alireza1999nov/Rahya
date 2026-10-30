@@ -1,11 +1,12 @@
 const getAccountTransactions = async (
     accountId,
     transactionRepository,
-    accountRepository
+    accountRepository,
+    currentUserId
 ) => {
     const account = await accountRepository.findById(accountId);
 
-    if (!account) {
+    if (!account || account.userId !== currentUserId) {
         return {
             valid: false,
             error: 'ACCOUNT_NOT_FOUND',

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import createTransaction from '../src/useCases/createTransaction.js';
 
+const currentUserId = 'user-1';
+
 function createDependencies({
     accountsById = {},
 } = {}) {
@@ -35,7 +37,11 @@ const transactionDate = '2026-10-10T12:00:00+03:30';
 test('rejects income on an archived account', async () => {
     const deps = createDependencies({
         accountsById: {
-            'account-1': { id: 'account-1', isArchived: true },
+            'account-1': {
+                id: 'account-1',
+                userId: currentUserId,
+                isArchived: true,
+            },
         },
     });
 
@@ -49,6 +55,7 @@ test('rejects income on an archived account', async () => {
         },
         deps.transactionRepository,
         deps.accountRepository,
+        currentUserId,
     );
 
     assert.equal(result.valid, false);
@@ -59,7 +66,11 @@ test('rejects income on an archived account', async () => {
 test('rejects expense on an archived account', async () => {
     const deps = createDependencies({
         accountsById: {
-            'account-1': { id: 'account-1', isArchived: true },
+            'account-1': {
+                id: 'account-1',
+                userId: currentUserId,
+                isArchived: true,
+            },
         },
     });
 
@@ -73,6 +84,7 @@ test('rejects expense on an archived account', async () => {
         },
         deps.transactionRepository,
         deps.accountRepository,
+        currentUserId,
     );
 
     assert.equal(result.valid, false);
@@ -83,8 +95,16 @@ test('rejects expense on an archived account', async () => {
 test('rejects transfer when the source account is archived', async () => {
     const deps = createDependencies({
         accountsById: {
-            source: { id: 'source', isArchived: true },
-            destination: { id: 'destination', isArchived: false },
+            source: {
+                id: 'source',
+                userId: currentUserId,
+                isArchived: true,
+            },
+            destination: {
+                id: 'destination',
+                userId: currentUserId,
+                isArchived: false,
+            },
         },
     });
 
@@ -98,6 +118,7 @@ test('rejects transfer when the source account is archived', async () => {
         },
         deps.transactionRepository,
         deps.accountRepository,
+        currentUserId,
     );
 
     assert.equal(result.valid, false);
@@ -108,8 +129,16 @@ test('rejects transfer when the source account is archived', async () => {
 test('rejects transfer when the destination account is archived', async () => {
     const deps = createDependencies({
         accountsById: {
-            source: { id: 'source', isArchived: false },
-            destination: { id: 'destination', isArchived: true },
+            source: {
+                id: 'source',
+                userId: currentUserId,
+                isArchived: false,
+            },
+            destination: {
+                id: 'destination',
+                userId: currentUserId,
+                isArchived: true,
+            },
         },
     });
 
@@ -123,6 +152,7 @@ test('rejects transfer when the destination account is archived', async () => {
         },
         deps.transactionRepository,
         deps.accountRepository,
+        currentUserId,
     );
 
     assert.equal(result.valid, false);
@@ -133,7 +163,11 @@ test('rejects transfer when the destination account is archived', async () => {
 test('creates income on an active account', async () => {
     const deps = createDependencies({
         accountsById: {
-            'account-1': { id: 'account-1', isArchived: false },
+            'account-1': {
+                id: 'account-1',
+                userId: currentUserId,
+                isArchived: false,
+            },
         },
     });
 
@@ -147,9 +181,39 @@ test('creates income on an active account', async () => {
         },
         deps.transactionRepository,
         deps.accountRepository,
+        currentUserId,
     );
 
     assert.equal(result.valid, true);
     assert.equal(result.data.accountId, 'account-1');
     assert.equal(deps.calls.createTransaction, 1);
+});
+
+test('rejects income on an account owned by another user', async () => {
+    const deps = createDependencies({
+        accountsById: {
+            'account-1': {
+                id: 'account-1',
+                userId: 'other-user',
+                isArchived: false,
+            },
+        },
+    });
+
+    const result = await createTransaction(
+        {
+            type: 'income',
+            accountId: 'account-1',
+            amount: 100,
+            category: 'Salary',
+            transactionDate,
+        },
+        deps.transactionRepository,
+        deps.accountRepository,
+        currentUserId,
+    );
+
+    assert.equal(result.valid, false);
+    assert.equal(result.error, 'ACCOUNT_NOT_FOUND');
+    assert.equal(deps.calls.createTransaction, 0);
 });

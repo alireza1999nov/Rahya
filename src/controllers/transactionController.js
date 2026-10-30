@@ -11,7 +11,8 @@ const createTransactionController = async (req, res, next) => {
         const result = await createTransaction(
             req.body,
             transactionRepository,
-            accountRepository
+            accountRepository,
+            req.currentUser.id
         );
 
         if (!result.valid) {
@@ -38,7 +39,8 @@ const getAccountTransactionsController = async (req, res, next) => {
         const result = await getAccountTransactions(
             accountId,
             transactionRepository,
-            accountRepository
+            accountRepository,
+            req.currentUser.id
         );
 
         if (!result.valid) {
@@ -65,7 +67,8 @@ const updateTransactionController = async (req, res, next) => {
             transactionId,
             req.body,
             transactionRepository,
-            accountRepository
+            accountRepository,
+            req.currentUser.id
         );
 
         if (!result.valid) {
@@ -106,7 +109,9 @@ const deleteTransactionController = async (req, res, next) => {
 
         const result = await deleteTransaction(
             transactionId,
-            transactionRepository
+            transactionRepository,
+            accountRepository,
+            req.currentUser.id
         );
 
         if (!result.valid) {
