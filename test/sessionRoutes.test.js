@@ -12,9 +12,13 @@ import { hashSessionToken } from '../src/auth/sessionToken.js';
 const testUri = process.env.MONGODB_TEST_URI;
 const testUserId = 'session-route-test-user';
 const deactivatedUserId = 'session-route-deactivated-user';
+const expiredUserId = 'session-route-expired-user';
 const testPassword = 'session-route-password';
 const testEmail = 'session-route-test@example.test';
 const deactivatedEmail = 'session-route-deactivated@example.test';
+const expiredEmail = 'session-route-expired@example.test';
+const expiredToken = 'session-route-expired-token';
+const deactivatedSessionToken = 'session-route-deactivated-token';
 
 test('session route integration tests', async (t) => {
     assert.ok(testUri, 'MONGODB_TEST_URI must be configured');
@@ -33,10 +37,10 @@ test('session route integration tests', async (t) => {
         await Promise.all([User.init(), Session.init()]);
 
         await Session.deleteMany({
-            userId: { $in: [testUserId, deactivatedUserId] },
+            userId: { $in: [testUserId, deactivatedUserId, expiredUserId] },
         });
         await User.deleteMany({
-            _id: { $in: [testUserId, deactivatedUserId] },
+            _id: { $in: [testUserId, deactivatedUserId, expiredUserId] },
         });
 
         await User.create([
@@ -53,6 +57,26 @@ test('session route integration tests', async (t) => {
                 email: deactivatedEmail,
                 passwordHash,
                 status: 'deactivated',
+            },
+            {
+                _id: expiredUserId,
+                name: 'Expired Session User',
+                email: expiredEmail,
+                passwordHash,
+                status: 'active',
+            },
+        ]);
+
+        await Session.create([
+            {
+                userId: expiredUserId,
+                tokenHash: hashSessionToken(expiredToken),
+                expiresAt: new Date(Date.now() - 60_000),
+            },
+            {
+                userId: deactivatedUserId,
+                tokenHash: hashSessionToken(deactivatedSessionToken),
+                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
             },
         ]);
 
@@ -92,6 +116,55 @@ test('session route integration tests', async (t) => {
             assert.notEqual(storedSession.tokenHash, body.token);
 
             accessToken = body.token;
+        });
+
+        await t.test('normalizes email case when creating a session', async () => {
+            const response = await fetch(`${baseUrl}/sessions`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                    email: testEmail.toUpperCase(),
+                    password: testPassword,
+                }),
+            });
+
+            const body = await response.json();
+
+            assert.equal(response.status, 201);
+            assert.equal(body.user.email, testEmail);
+            assert.equal(typeof body.token, 'string');
+        });
+
+        await t.test('rejects a wrong password with 401', async () => {
+            const response = await fetch(`${baseUrl}/sessions`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                    email: testEmail,
+                    password: 'not-the-session-password',
+                }),
+            });
+
+            const body = await response.json();
+
+            assert.equal(response.status, 401);
+            assert.equal(body.error, 'INVALID_CREDENTIALS');
+        });
+
+        await t.test('returns 400 for invalid login input', async () => {
+            const response = await fetch(`${baseUrl}/sessions`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                    email: 'not-an-email',
+                    password: testPassword,
+                }),
+            });
+
+            const body = await response.json();
+
+            assert.equal(response.status, 400);
+            assert.equal(body.error, 'VALIDATION_ERROR');
         });
 
         await t.test('rejects unknown credentials with 401', async () => {
@@ -137,6 +210,48 @@ test('session route integration tests', async (t) => {
             assert.equal(body.error, 'UNAUTHENTICATED');
         });
 
+        await t.test('rejects a malformed authorization header', async () => {
+            const response = await fetch(`${baseUrl}/sessions/current`, {
+                method: 'DELETE',
+                headers: {
+                    Authorization: `Bearer ${accessToken} extra`,
+                },
+            });
+
+            const body = await response.json();
+
+            assert.equal(response.status, 401);
+            assert.equal(body.error, 'UNAUTHENTICATED');
+        });
+
+        await t.test('rejects an expired session', async () => {
+            const response = await fetch(`${baseUrl}/sessions/current`, {
+                method: 'DELETE',
+                headers: {
+                    Authorization: `Bearer ${expiredToken}`,
+                },
+            });
+
+            const body = await response.json();
+
+            assert.equal(response.status, 401);
+            assert.equal(body.error, 'UNAUTHENTICATED');
+        });
+
+        await t.test('rejects a deactivated user session with 403', async () => {
+            const response = await fetch(`${baseUrl}/sessions/current`, {
+                method: 'DELETE',
+                headers: {
+                    Authorization: `Bearer ${deactivatedSessionToken}`,
+                },
+            });
+
+            const body = await response.json();
+
+            assert.equal(response.status, 403);
+            assert.equal(body.error, 'USER_DEACTIVATED');
+        });
+
         await t.test('revokes the current session', async () => {
             const response = await fetch(`${baseUrl}/sessions/current`, {
                 method: 'DELETE',
@@ -152,6 +267,7 @@ test('session route integration tests', async (t) => {
 
             const storedSession = await Session.findOne({
                 userId: testUserId,
+                tokenHash: hashSessionToken(accessToken),
             }).lean();
 
             assert.ok(storedSession.revokedAt);
@@ -176,10 +292,10 @@ test('session route integration tests', async (t) => {
         });
 
         await Session.deleteMany({
-            userId: { $in: [testUserId, deactivatedUserId] },
+            userId: { $in: [testUserId, deactivatedUserId, expiredUserId] },
         });
         await User.deleteMany({
-            _id: { $in: [testUserId, deactivatedUserId] },
+            _id: { $in: [testUserId, deactivatedUserId, expiredUserId] },
         });
 
         await mongoose.disconnect();

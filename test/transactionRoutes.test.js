@@ -12,6 +12,7 @@ import { hashSessionToken } from '../src/auth/sessionToken.js';
 import { randomUUID } from 'node:crypto';
 
 const accessToken = 'transaction-route-access-token';
+const otherAccessToken = 'transaction-route-other-access-token';
 
 const testUri = process.env.MONGODB_TEST_URI;
 
@@ -29,6 +30,7 @@ test('transaction route integration tests', async (t) => {
     await mongoose.connect(testUri);
 
     const userId = randomUUID();
+    const otherUserId = randomUUID();
 
     const accountIds = {
         primary: randomUUID(),
@@ -38,12 +40,17 @@ test('transaction route integration tests', async (t) => {
 
     const archivedAccountId = randomUUID();
     const orphanAccountId = randomUUID();
+    const otherAccountId = randomUUID();
+    const otherDestinationAccountId = randomUUID();
 
     const allAccountIds = [
-    ...Object.values(accountIds),
-    archivedAccountId,
-    orphanAccountId,
+        ...Object.values(accountIds),
+        archivedAccountId,
+        orphanAccountId,
+        otherAccountId,
+        otherDestinationAccountId,
     ];
+    const allUserIds = [userId, otherUserId];
 
     let server;
     let baseUrl;
@@ -64,19 +71,35 @@ test('transaction route integration tests', async (t) => {
             Session.init(),
         ]);
 
-        await User.create({
-            _id: userId,
-            name: 'Transaction Route Test User',
-            email: `transaction-route-${userId}@example.com`,
-            passwordHash: 'integration-test-password-hash',
-            status: 'active',
-        });
+        await User.create([
+            {
+                _id: userId,
+                name: 'Transaction Route Test User',
+                email: `transaction-route-${userId}@example.com`,
+                passwordHash: 'integration-test-password-hash',
+                status: 'active',
+            },
+            {
+                _id: otherUserId,
+                name: 'Other Transaction Route User',
+                email: `transaction-route-${otherUserId}@example.com`,
+                passwordHash: 'integration-test-password-hash',
+                status: 'active',
+            },
+        ]);
 
-        await Session.create({
-            userId,
-            tokenHash: hashSessionToken(accessToken),
-            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-        });
+        await Session.create([
+            {
+                userId,
+                tokenHash: hashSessionToken(accessToken),
+                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            },
+            {
+                userId: otherUserId,
+                tokenHash: hashSessionToken(otherAccessToken),
+                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            },
+        ]);
 
         await Account.create([
             {
@@ -114,7 +137,21 @@ test('transaction route integration tests', async (t) => {
                 name: 'Transaction Route Orphan',
                 type: 'bank',
                 openingBalance: 1000,
-            }
+            },
+            {
+                _id: otherAccountId,
+                userId: otherUserId,
+                name: 'Other User Primary',
+                type: 'bank',
+                openingBalance: 1000,
+            },
+            {
+                _id: otherDestinationAccountId,
+                userId: otherUserId,
+                name: 'Other User Destination',
+                type: 'bank',
+                openingBalance: 1000,
+            },
         ]);
 
         await new Promise((resolve) => {
@@ -140,6 +177,60 @@ test('transaction route integration tests', async (t) => {
                             category: 'Salary',
                             transactionDate,
                         }),
+                    },
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 401);
+                assert.equal(body.error, 'UNAUTHENTICATED');
+            },
+        );
+
+        await t.test(
+            'rejects reading transactions without a session',
+            async () => {
+                const response = await fetch(
+                    `${baseUrl}/accounts/${accountIds.primary}/transactions`,
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 401);
+                assert.equal(body.error, 'UNAUTHENTICATED');
+            },
+        );
+
+        await t.test(
+            'rejects updating a transaction without a session',
+            async () => {
+                const response = await fetch(
+                    `${baseUrl}/transactions/${randomUUID()}`,
+                    {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            amount: 80,
+                        }),
+                    },
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 401);
+                assert.equal(body.error, 'UNAUTHENTICATED');
+            },
+        );
+
+        await t.test(
+            'rejects deleting a transaction without a session',
+            async () => {
+                const response = await fetch(
+                    `${baseUrl}/transactions/${randomUUID()}`,
+                    {
+                        method: 'DELETE',
                     },
                 );
 
@@ -224,6 +315,62 @@ test('transaction route integration tests', async (t) => {
         );
 
         await t.test(
+            'POST hides another user account behind ACCOUNT_NOT_FOUND',
+            async () => {
+                const response = await fetch(
+                    `${baseUrl}/transactions`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: 'income',
+                            accountId: otherAccountId,
+                            amount: 100,
+                            category: 'Salary',
+                            transactionDate,
+                        }),
+                    },
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 404);
+                assert.equal(body.error, 'ACCOUNT_NOT_FOUND');
+            },
+        );
+
+        await t.test(
+            'POST returns 404 when the account does not exist',
+            async () => {
+                const response = await fetch(
+                    `${baseUrl}/transactions`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: 'expense',
+                            accountId: randomUUID(),
+                            amount: 20,
+                            category: 'Food',
+                            transactionDate,
+                        }),
+                    },
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 404);
+                assert.equal(body.error, 'ACCOUNT_NOT_FOUND');
+            },
+        );
+
+        await t.test(
             'GET /accounts/:accountId/transactions returns related transactions',
             async () => {
                 const response = await fetch(
@@ -246,6 +393,25 @@ test('transaction route integration tests', async (t) => {
 
                 assert.ok(transactionIds.includes(incomeTransactionId));
                 assert.ok(transactionIds.includes(expenseTransactionId));
+            },
+        );
+
+        await t.test(
+            'GET hides another user account behind ACCOUNT_NOT_FOUND',
+            async () => {
+                const response = await fetch(
+                    `${baseUrl}/accounts/${otherAccountId}/transactions`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                        },
+                    },
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 404);
+                assert.equal(body.error, 'ACCOUNT_NOT_FOUND');
             },
         );
 
@@ -454,6 +620,26 @@ test('transaction route integration tests', async (t) => {
         );
 
         await t.test(
+            'DELETE returns 404 when the transaction is already deleted',
+            async () => {
+                const response = await fetch(
+                    `${baseUrl}/transactions/${expenseTransactionId}`,
+                    {
+                        method: 'DELETE',
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                        },
+                    },
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 404);
+                assert.equal(body.error, 'TRANSACTION_NOT_FOUND');
+            },
+        );
+
+        await t.test(
             'POST rejects a transaction on an archived account',
             async () => {
                 const response = await fetch(
@@ -514,6 +700,132 @@ test('transaction route integration tests', async (t) => {
                 );
 
                 transferTransactionId = body.id;
+            },
+        );
+
+        await t.test(
+            'GET includes a transfer for both related accounts',
+            async () => {
+                const [sourceResponse, destinationResponse] = await Promise.all([
+                    fetch(
+                        `${baseUrl}/accounts/${accountIds.source}/transactions`,
+                        {
+                            headers: {
+                                Authorization: `Bearer ${accessToken}`,
+                            },
+                        },
+                    ),
+                    fetch(
+                        `${baseUrl}/accounts/${accountIds.destination}/transactions`,
+                        {
+                            headers: {
+                                Authorization: `Bearer ${accessToken}`,
+                            },
+                        },
+                    ),
+                ]);
+
+                const sourceBody = await sourceResponse.json();
+                const destinationBody = await destinationResponse.json();
+
+                assert.equal(sourceResponse.status, 200);
+                assert.equal(destinationResponse.status, 200);
+                assert.equal(
+                    sourceBody.some(
+                        (transaction) => transaction.id === transferTransactionId,
+                    ),
+                    true,
+                );
+                assert.equal(
+                    destinationBody.some(
+                        (transaction) => transaction.id === transferTransactionId,
+                    ),
+                    true,
+                );
+            },
+        );
+
+        await t.test(
+            'POST hides another user transfer destination behind DESTINATION_ACCOUNT_NOT_FOUND',
+            async () => {
+                const response = await fetch(
+                    `${baseUrl}/transactions`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: 'transfer',
+                            sourceAccountId: accountIds.source,
+                            destinationAccountId: otherAccountId,
+                            amount: 15,
+                            transactionDate,
+                        }),
+                    },
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 404);
+                assert.equal(body.error, 'DESTINATION_ACCOUNT_NOT_FOUND');
+            },
+        );
+
+        await t.test(
+            'POST hides another user transfer source behind SOURCE_ACCOUNT_NOT_FOUND',
+            async () => {
+                const response = await fetch(
+                    `${baseUrl}/transactions`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: 'transfer',
+                            sourceAccountId: otherAccountId,
+                            destinationAccountId: accountIds.destination,
+                            amount: 15,
+                            transactionDate,
+                        }),
+                    },
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 404);
+                assert.equal(body.error, 'SOURCE_ACCOUNT_NOT_FOUND');
+            },
+        );
+
+        await t.test(
+            'POST rejects a transfer when the destination account is archived',
+            async () => {
+                const response = await fetch(
+                    `${baseUrl}/transactions`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: 'transfer',
+                            sourceAccountId: accountIds.source,
+                            destinationAccountId: archivedAccountId,
+                            amount: 15,
+                            transactionDate,
+                        }),
+                    },
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 409);
+                assert.equal(body.error, 'ACCOUNT_ARCHIVED');
             },
         );
 
@@ -623,6 +935,80 @@ test('transaction route integration tests', async (t) => {
         );
 
         await t.test(
+            'PATCH hides another user transaction behind TRANSACTION_NOT_FOUND',
+            async () => {
+                const foreignTransaction = await Transaction.create({
+                    _id: randomUUID(),
+                    type: 'income',
+                    accountId: otherAccountId,
+                    amount: 80,
+                    category: 'Salary',
+                    transactionDate,
+                });
+
+                const response = await fetch(
+                    `${baseUrl}/transactions/${foreignTransaction._id}`,
+                    {
+                        method: 'PATCH',
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            amount: 90,
+                        }),
+                    },
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 404);
+                assert.equal(body.error, 'TRANSACTION_NOT_FOUND');
+
+                const persisted = await Transaction.findById(
+                    foreignTransaction._id,
+                ).lean();
+
+                assert.equal(persisted.amount, 80);
+            },
+        );
+
+        await t.test(
+            'DELETE hides another user transaction behind TRANSACTION_NOT_FOUND',
+            async () => {
+                const foreignTransaction = await Transaction.create({
+                    _id: randomUUID(),
+                    type: 'expense',
+                    accountId: otherAccountId,
+                    amount: 12,
+                    category: 'Food',
+                    transactionDate,
+                });
+
+                const response = await fetch(
+                    `${baseUrl}/transactions/${foreignTransaction._id}`,
+                    {
+                        method: 'DELETE',
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                        },
+                    },
+                );
+
+                const body = await response.json();
+
+                assert.equal(response.status, 404);
+                assert.equal(body.error, 'TRANSACTION_NOT_FOUND');
+
+                const persisted = await Transaction.findById(
+                    foreignTransaction._id,
+                ).lean();
+
+                assert.equal(persisted.deletedAt, null);
+            },
+        );
+
+        await t.test(
             'PATCH returns 404 when the transaction does not exist',
             async () => {
                 const response = await fetch(
@@ -693,11 +1079,11 @@ test('transaction route integration tests', async (t) => {
                 });
 
                 await Session.deleteMany({
-                    userId,
+                    userId: { $in: allUserIds },
                 });
 
-                await User.deleteOne({
-                    _id: userId,
+                await User.deleteMany({
+                    _id: { $in: allUserIds },
                 });
             } finally {
                 await mongoose.disconnect();

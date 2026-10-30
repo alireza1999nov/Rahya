@@ -18,6 +18,9 @@ const createTransactionController = async (req, res, next) => {
         if (!result.valid) {
             const statusByError = {
                 ACCOUNT_ARCHIVED: 409,
+                ACCOUNT_NOT_FOUND: 404,
+                SOURCE_ACCOUNT_NOT_FOUND: 404,
+                DESTINATION_ACCOUNT_NOT_FOUND: 404,
             };
 
             return res.status(statusByError[result.error] ?? 400).json({
