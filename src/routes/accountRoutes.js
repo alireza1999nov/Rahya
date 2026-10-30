@@ -4,8 +4,15 @@ import userRepository from '../repositories/userRepository.js';
 import accountRepository from '../repositories/accountRepository.js';
 import requireJsonBody from '../middleware/requireJsonBody.js';
 import requireAuthenticatedUser from '../middleware/requireAuthenticatedUser.js';
+import { getCurrentBalanceController } from '../controllers/accountController.js';
 
 const router = express.Router();
+
+router.get(
+    '/accounts/:accountId/balance',
+    requireAuthenticatedUser,
+    getCurrentBalanceController
+);
 
 router.post(
     '/accounts',
