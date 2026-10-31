@@ -53,6 +53,55 @@ const toTenths = (amount) => {
 };
 
 const transactionTime = (transaction) => {
+    const match =
+        typeof transaction.transactionDate === 'string'
+            ? transaction.transactionDate.match(
+                  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\+03:30$/,
+              )
+            : null;
+
+    if (!match) {
+        throw new Error('Stored transaction date is invalid');
+    }
+
+    const [, yearString, monthString, dayString, hourString, minuteString, secondString] =
+        match;
+    const year = Number(yearString);
+    const month = Number(monthString);
+    const day = Number(dayString);
+    const hour = Number(hourString);
+    const minute = Number(minuteString);
+    const second = Number(secondString);
+    const isLeapYear =
+        year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const daysInMonth = [
+        31,
+        isLeapYear ? 29 : 28,
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+
+    if (
+        year === 0 ||
+        month < 1 ||
+        month > 12 ||
+        day < 1 ||
+        day > daysInMonth[month - 1] ||
+        hour > 23 ||
+        minute > 59 ||
+        second > 59
+    ) {
+        throw new Error('Stored transaction date is invalid');
+    }
+
     const time = Date.parse(transaction.transactionDate);
 
     if (!Number.isFinite(time)) {
@@ -60,12 +109,6 @@ const transactionTime = (transaction) => {
     }
 
     return time;
-};
-
-const createdTime = (transaction) => {
-    const time = new Date(transaction.createdAt ?? 0).getTime();
-
-    return Number.isFinite(time) ? time : 0;
 };
 
 export const assertHistoricalBalances = async (
@@ -92,31 +135,17 @@ export const assertHistoricalBalances = async (
                 accountId,
                 session,
             );
-        const orderedTransactions = transactions
-            .filter((transaction) => transactionTime(transaction) <= now)
-            .sort((left, right) => {
-                const timeDifference =
-                    transactionTime(left) - transactionTime(right);
+        const changesByTimestamp = new Map();
 
-                if (timeDifference !== 0) {
-                    return timeDifference;
-                }
+        for (const transaction of transactions) {
+            const timestamp = transactionTime(transaction);
 
-                const createdDifference =
-                    createdTime(left) - createdTime(right);
+            if (timestamp > now) {
+                continue;
+            }
 
-                if (createdDifference !== 0) {
-                    return createdDifference;
-                }
-
-                return String(left.id).localeCompare(String(right.id));
-            });
-
-        let balanceInTenths = toTenths(account.openingBalance);
-
-        for (const transaction of orderedTransactions) {
-            const amountInTenths = toTenths(transaction.amount);
-            let changeInTenths = 0;
+            const amountInTenths = BigInt(toTenths(transaction.amount));
+            let changeInTenths = 0n;
 
             if (
                 transaction.type === 'income' &&
@@ -140,13 +169,27 @@ export const assertHistoricalBalances = async (
                 changeInTenths = amountInTenths;
             }
 
-            balanceInTenths += changeInTenths;
+            changesByTimestamp.set(
+                timestamp,
+                (changesByTimestamp.get(timestamp) ?? 0n) + changeInTenths,
+            );
+        }
 
-            if (!Number.isSafeInteger(balanceInTenths)) {
+        let balanceInTenths = BigInt(toTenths(account.openingBalance));
+
+        for (const timestamp of [...changesByTimestamp.keys()].sort(
+            (left, right) => left - right,
+        )) {
+            balanceInTenths += changesByTimestamp.get(timestamp);
+
+            if (
+                balanceInTenths > BigInt(Number.MAX_SAFE_INTEGER) ||
+                balanceInTenths < BigInt(Number.MIN_SAFE_INTEGER)
+            ) {
                 throw new Error('Calculated historical balance is invalid');
             }
 
-            if (balanceInTenths < 0) {
+            if (balanceInTenths < 0n) {
                 rejectFinancialMutation({
                     valid: false,
                     error: 'HISTORICAL_BALANCE_VIOLATION',
