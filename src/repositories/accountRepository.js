@@ -25,8 +25,26 @@ const accountRepository = {
         return Account.findOne({ userId, name }).lean();
     },
 
-    async findById(accountId) {
-        return Account.findById(accountId).lean();
+    async findById(accountId, session) {
+        const query = Account.findById(accountId);
+
+        if (session) {
+            query.session(session);
+        }
+
+        return query.lean();
+    },
+
+    async incrementFinancialRevision(accountId, userId, session) {
+        return Account.findOneAndUpdate(
+            { _id: accountId, userId },
+            { $inc: { financialRevision: 1 } },
+            {
+                returnDocument: 'after',
+                runValidators: true,
+                session,
+            },
+        ).lean();
     }
 };
 

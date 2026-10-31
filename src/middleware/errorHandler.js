@@ -27,6 +27,16 @@ const errorHandler = (error, _, res, next) => {
         });
     }
 
+    if (error.name === 'FinancialOutcomeUnknownError') {
+        console.error('Financial transaction commit outcome is unknown', error);
+
+        return res.status(503).json({
+            error: 'FINANCIAL_OPERATION_OUTCOME_UNKNOWN',
+            message:
+                'The operation outcome could not be confirmed. Check transaction history before retrying.',
+        });
+    }
+
     // Log diagnostic details on the server, not in the HTTP response.
     console.error('Unhandled request error', error);
 

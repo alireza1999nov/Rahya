@@ -11,21 +11,44 @@ function createDependencies({
         findAccountById: 0,
         createTransaction: 0,
     };
+    const transactions = [];
 
     const accountRepository = {
         async findById(accountId) {
             calls.findAccountById++;
             return accountsById[accountId] ?? null;
         },
+        async incrementFinancialRevision(accountId, userId) {
+            const account = accountsById[accountId];
+
+            return account && account.userId === userId
+                ? { openingBalance: 0, ...account }
+                : null;
+        },
     };
 
     const transactionRepository = {
+        async withTransaction(operation) {
+            return operation({});
+        },
         async create(transaction) {
             calls.createTransaction++;
-            return {
+            const created = {
                 ...transaction,
                 id: transaction.id,
+                createdAt: new Date(),
             };
+            transactions.push(created);
+            return created;
+        },
+        async findByRelatedAccountId(accountId) {
+            return transactions.filter(
+                (transaction) =>
+                    transaction.deletedAt === null &&
+                    (transaction.accountId === accountId ||
+                        transaction.sourceAccountId === accountId ||
+                        transaction.destinationAccountId === accountId),
+            );
         },
     };
 

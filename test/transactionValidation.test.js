@@ -416,6 +416,9 @@ test('does not mutate an income transaction when its date is invalid', async (t)
     let updateCalled = false;
 
     const transactionRepository = {
+        async withTransaction(operation) {
+            return operation({});
+        },
         async findById(id) {
             return id === transactionId ? { ...storedTransaction } : null;
         },
@@ -441,6 +444,14 @@ test('does not mutate an income transaction when its date is invalid', async (t)
                     return {
                         id: accountId,
                         userId: 'user-1',
+                        isArchived: false,
+                    };
+                },
+                async incrementFinancialRevision(accountId) {
+                    return {
+                        id: accountId,
+                        userId: 'user-1',
+                        openingBalance: 0,
                         isArchived: false,
                     };
                 },
@@ -475,6 +486,9 @@ test('does not mutate an expense transaction when its date is invalid', async (t
     let updateCalled = false;
 
     const transactionRepository = {
+        async withTransaction(operation) {
+            return operation({});
+        },
         async findById(id) {
             return id === transactionId ? { ...storedTransaction } : null;
         },
@@ -500,6 +514,14 @@ test('does not mutate an expense transaction when its date is invalid', async (t
                     return {
                         id: accountId,
                         userId: 'user-1',
+                        isArchived: false,
+                    };
+                },
+                async incrementFinancialRevision(accountId) {
+                    return {
+                        id: accountId,
+                        userId: 'user-1',
+                        openingBalance: 0,
                         isArchived: false,
                     };
                 },
@@ -534,6 +556,9 @@ test('does not allow transfer updates', async (t) => {
     let updateCalled = false;
 
     const transactionRepository = {
+        async withTransaction(operation) {
+            return operation({});
+        },
         async findById(id) {
             return id === transactionId ? { ...storedTransaction } : null;
         },

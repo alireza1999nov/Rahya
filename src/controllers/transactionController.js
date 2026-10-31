@@ -18,6 +18,7 @@ const createTransactionController = async (req, res, next) => {
         if (!result.valid) {
             const statusByError = {
                 ACCOUNT_ARCHIVED: 409,
+                HISTORICAL_BALANCE_VIOLATION: 409,
                 ACCOUNT_NOT_FOUND: 404,
                 SOURCE_ACCOUNT_NOT_FOUND: 404,
                 DESTINATION_ACCOUNT_NOT_FOUND: 404,
@@ -79,6 +80,7 @@ const updateTransactionController = async (req, res, next) => {
                 TRANSACTION_NOT_FOUND: 404,
                 TRANSFER_UPDATE_NOT_ALLOWED: 409,
                 ACCOUNT_ARCHIVED: 409,
+                HISTORICAL_BALANCE_VIOLATION: 409,
                 DATA_INTEGRITY_ERROR: 500,
             };
 
@@ -121,6 +123,7 @@ const deleteTransactionController = async (req, res, next) => {
             const statusByError = {
                 TRANSACTION_NOT_FOUND: 404,
                 TRANSFER_DELETE_NOT_ALLOWED: 409,
+                HISTORICAL_BALANCE_VIOLATION: 409,
             };
 
             const statusCode = statusByError[result.error] ?? 400;

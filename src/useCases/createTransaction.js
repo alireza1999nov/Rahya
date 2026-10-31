@@ -1,14 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { validateTransactionCreateInput } from '../validation/transactionValidation.js';
-
-const accountIsAccessible = (account, currentUserId) =>
-    Boolean(account) && account.userId === currentUserId;
+import {
+    assertHistoricalBalances,
+    rejectFinancialMutation,
+    runFinancialTransaction,
+} from './financialTransactionHelpers.js';
 
 const createTransaction = async (
     transactionInput,
     transactionRepository,
     accountRepository,
-    currentUserId
+    currentUserId,
 ) => {
     const validation = validateTransactionCreateInput(transactionInput);
 
@@ -16,85 +18,112 @@ const createTransaction = async (
         return validation;
     }
 
-    if (
-        validation.data.type === 'income' ||
-        validation.data.type === 'expense'
-    ) {
-        const account = await accountRepository.findById(
-            validation.data.accountId
-        );
-
-        if (!accountIsAccessible(account, currentUserId)) {
-            return {
-                valid: false,
-                error: 'ACCOUNT_NOT_FOUND',
-                message: 'Account not found',
-            };
-        }
-
-        if (account.isArchived) {
-            return {
-                valid: false,
-                error: 'ACCOUNT_ARCHIVED',
-                message: 'New transactions on archived accounts are prohibited',
-            };
-        }
-    }
-
-    if (validation.data.type === 'transfer') {
-        const sourceAccount = await accountRepository.findById(
-            validation.data.sourceAccountId
-        );
-
-        if (!accountIsAccessible(sourceAccount, currentUserId)) {
-            return {
-                valid: false,
-                error: 'SOURCE_ACCOUNT_NOT_FOUND',
-                message: 'Source account not found',
-            };
-        }
-
-        if (sourceAccount.isArchived) {
-            return {
-                valid: false,
-                error: 'ACCOUNT_ARCHIVED',
-                message: 'New transactions on archived accounts are prohibited',
-            };
-        }
-
-        const destinationAccount = await accountRepository.findById(
-            validation.data.destinationAccountId
-        );
-
-        if (!accountIsAccessible(destinationAccount, currentUserId)) {
-            return {
-                valid: false,
-                error: 'DESTINATION_ACCOUNT_NOT_FOUND',
-                message: 'Destination account not found',
-            };
-        }
-
-        if (destinationAccount.isArchived) {
-            return {
-                valid: false,
-                error: 'ACCOUNT_ARCHIVED',
-                message: 'New transactions on archived accounts are prohibited',
-            };
-        }
-    }
-
     const transaction = {
         id: randomUUID(),
         ...validation.data,
         deletedAt: null,
     };
+    const accountIds =
+        transaction.type === 'transfer'
+            ? [
+                  transaction.sourceAccountId,
+                  transaction.destinationAccountId,
+              ]
+            : [transaction.accountId];
 
-    const createdTransaction = await transactionRepository.create(transaction);
+    return runFinancialTransaction(
+        transactionRepository,
+        async (session) => {
+            const accountsById = new Map();
+            const missingAccountErrors = new Map();
 
-    return {
-        valid: true,
-        data: createdTransaction,
-    };
+            if (transaction.type === 'transfer') {
+                missingAccountErrors.set(
+                    transaction.sourceAccountId,
+                    'SOURCE_ACCOUNT_NOT_FOUND',
+                );
+                missingAccountErrors.set(
+                    transaction.destinationAccountId,
+                    'DESTINATION_ACCOUNT_NOT_FOUND',
+                );
+            }
+
+            for (const accountId of accountIds) {
+                const account = await accountRepository.findById(
+                    accountId,
+                    session,
+                );
+
+                if (!account || account.userId !== currentUserId) {
+                    rejectFinancialMutation({
+                        valid: false,
+                        error:
+                            missingAccountErrors.get(accountId) ??
+                            'ACCOUNT_NOT_FOUND',
+                        message: 'Account not found',
+                    });
+                }
+
+                accountsById.set(accountId, account);
+            }
+
+            for (const account of accountsById.values()) {
+                if (account.isArchived) {
+                    rejectFinancialMutation({
+                        valid: false,
+                        error: 'ACCOUNT_ARCHIVED',
+                        message:
+                            'New transactions on archived accounts are prohibited',
+                    });
+                }
+            }
+
+            for (const accountId of [...new Set(accountIds)].sort()) {
+                const account =
+                    await accountRepository.incrementFinancialRevision(
+                        accountId,
+                        currentUserId,
+                        session,
+                    );
+
+                if (!account) {
+                    rejectFinancialMutation({
+                        valid: false,
+                        error:
+                            missingAccountErrors.get(accountId) ??
+                            'ACCOUNT_NOT_FOUND',
+                        message: 'Account not found',
+                    });
+                }
+
+                if (account.isArchived) {
+                    rejectFinancialMutation({
+                        valid: false,
+                        error: 'ACCOUNT_ARCHIVED',
+                        message:
+                            'New transactions on archived accounts are prohibited',
+                    });
+                }
+
+                accountsById.set(accountId, account);
+            }
+
+            const createdTransaction =
+                await transactionRepository.create(transaction, session);
+
+            await assertHistoricalBalances(
+                accountIds,
+                accountsById,
+                transactionRepository,
+                session,
+            );
+
+            return {
+                valid: true,
+                data: createdTransaction,
+            };
+        },
+    );
 };
 
 export default createTransaction;

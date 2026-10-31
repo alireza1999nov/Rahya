@@ -38,6 +38,18 @@ const accountSchema = new mongoose.Schema(
             }
         },
 
+        financialRevision: {
+            type: Number,
+            default: 0,
+            min: 0,
+            validate: {
+                validator(value) {
+                    return Number.isSafeInteger(value);
+                },
+                message: 'Financial revision must be a non-negative integer'
+            }
+        },
+
         currency: {
             type: String,
             required: true,

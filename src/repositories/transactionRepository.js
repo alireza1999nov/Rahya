@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Transaction from '../models/transactionModel.js';
 
 const toTransaction = (document) => {
@@ -19,40 +20,65 @@ const toTransaction = (document) => {
 };
 
 const transactionRepository = {
-    async create(transaction) {
+    async withTransaction(operation) {
+        const session = await mongoose.startSession();
+
+        try {
+            return await session.withTransaction(() => operation(session));
+        } finally {
+            await session.endSession();
+        }
+    },
+
+    async create(transaction, session) {
         const { id, _id, ...transactionData } = transaction;
 
-        const createdTransaction = await Transaction.create({
-            ...transactionData,
-            ...(id !== undefined ? { _id: id } : {}),
-        });
+        const [createdTransaction] = await Transaction.create(
+            [{
+                ...transactionData,
+                ...(id !== undefined ? { _id: id } : {}),
+            }],
+            session ? { session } : {},
+        );
 
         return toTransaction(createdTransaction);
     },
 
-    async findByRelatedAccountId(accountId) {
-        const transactions = await Transaction.find({
+    async findByRelatedAccountId(accountId, session) {
+        const query = Transaction.find({
             $or: [
                 { accountId },
                 { sourceAccountId: accountId },
                 { destinationAccountId: accountId },
             ],
             deletedAt: null,
-        }).lean();
+        });
+
+        if (session) {
+            query.session(session);
+        }
+
+        const transactions = await query.lean();
 
         return transactions.map(toTransaction);
     },
 
-    async findById(transactionId) {
-        const transaction = await Transaction.findOne({
+    async findById(transactionId, session) {
+        const query = Transaction.findOne({
             _id: transactionId,
             deletedAt: null,
-        }).lean();
+        });
+
+        if (session) {
+            query.session(session);
+        }
+
+        const transaction = await query.lean();
 
         return toTransaction(transaction);
     },
 
-    async update(transactionId, updates) {
+    async update(transactionId, updates, session) {
         const updatedTransaction = await Transaction.findOneAndUpdate(
             {
                 _id: transactionId,
@@ -64,13 +90,14 @@ const transactionRepository = {
             {
                 returnDocument: 'after',
                 runValidators: true,
+                session,
             },
         ).lean();
 
         return toTransaction(updatedTransaction);
     },
 
-    async delete(transactionId) {
+    async delete(transactionId, session) {
         const deletedTransaction = await Transaction.findOneAndUpdate(
             {
                 _id: transactionId,
@@ -83,6 +110,7 @@ const transactionRepository = {
             },
             {
                 returnDocument: 'after',
+                session,
             },
         ).lean();
 

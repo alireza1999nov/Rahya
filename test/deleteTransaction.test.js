@@ -42,6 +42,10 @@ const createInMemoryTransactionRepository = (initialTransactions = []) => {
     }
 
     return {
+        async withTransaction(operation) {
+            return operation({});
+        },
+
         async create(transaction) {
             transactions.set(transaction.id, { ...transaction });
             return { ...transactions.get(transaction.id) };
@@ -74,6 +78,16 @@ const createInMemoryTransactionRepository = (initialTransactions = []) => {
 
             return { ...deletedTransaction };
         },
+
+        async findByRelatedAccountId(accountId) {
+            return [...transactions.values()].filter(
+                (transaction) =>
+                    transaction.deletedAt === null &&
+                    (transaction.accountId === accountId ||
+                        transaction.sourceAccountId === accountId ||
+                        transaction.destinationAccountId === accountId),
+            );
+        },
     };
 };
 
@@ -86,20 +100,26 @@ const createAccountRepository = (transaction) => {
         accounts[transaction.sourceAccountId] = {
             id: transaction.sourceAccountId,
             userId: currentUserId,
+            openingBalance: 0,
         };
         accounts[transaction.destinationAccountId] = {
             id: transaction.destinationAccountId,
             userId: currentUserId,
+            openingBalance: 0,
         };
     } else if (transaction.accountId) {
         accounts[transaction.accountId] = {
             id: transaction.accountId,
             userId: currentUserId,
+            openingBalance: 0,
         };
     }
 
     return {
         async findById(accountId) {
+            return accounts[accountId] ?? null;
+        },
+        async incrementFinancialRevision(accountId) {
             return accounts[accountId] ?? null;
         },
     };
@@ -109,8 +129,16 @@ const createDeleteSpyRepository = (repository) => {
     let deleteCalls = 0;
 
     return {
+        withTransaction(operation) {
+            return repository.withTransaction(operation);
+        },
+
         findById(id) {
             return repository.findById(id);
+        },
+
+        findByRelatedAccountId(accountId, session) {
+            return repository.findByRelatedAccountId(accountId, session);
         },
 
         delete(id) {
