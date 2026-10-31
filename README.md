@@ -299,9 +299,8 @@ for the complete accepted input contract.
 
 ## Requirements
 
--   A supported Node.js version that provides `--env-file` and the
-    built-in test runner. Node.js 20.6 or later is required for the
-    commands shown below.
+-   Node.js 20.19 or later, as required by Mongoose 9. The CI workflow
+    uses Node.js 24.
 -   MongoDB.
 -   A MongoDB **replica set** for integration tests and financial
     operations that use multi-document transactions. A standalone

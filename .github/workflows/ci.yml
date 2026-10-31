@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MONGODB_TEST_URI: mongodb://127.0.0.1:27017/rahya_test?replicaSet=rahya-rs
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start MongoDB replica set
+        shell: bash
+        run: |
+          docker run --detach \
+            --name rahya-mongo \
+            --publish 127.0.0.1:27017:27017 \
+            mongo:8.0 \
+            mongod --replSet rahya-rs --bind_ip_all
+
+          ready=0
+          for attempt in {1..30}; do
+            if docker exec rahya-mongo mongosh --quiet \
+              --eval 'db.adminCommand({ ping: 1 }).ok' >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+
+          if [[ "$ready" -ne 1 ]]; then
+            docker logs rahya-mongo
+            exit 1
+          fi
+
+          docker exec rahya-mongo mongosh --quiet \
+            --eval 'rs.initiate({_id: "rahya-rs", members: [{_id: 0, host: "127.0.0.1:27017"}]})'
+
+          primary=0
+          for attempt in {1..30}; do
+            if docker exec rahya-mongo mongosh --quiet \
+              --eval 'quit(db.adminCommand({hello: 1}).isWritablePrimary ? 0 : 1)' \
+              >/dev/null 2>&1; then
+              primary=1
+              break
+            fi
+            sleep 1
+          done
+
+          if [[ "$primary" -ne 1 ]]; then
+            docker logs rahya-mongo
+            exit 1
+          fi
+
+      - name: Run tests
+        run: npm test
